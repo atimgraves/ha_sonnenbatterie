@@ -1,9 +1,12 @@
+import requests
 import traceback
 from datetime import datetime
 import sys
 # pylint: disable=unused-wildcard-import
 from .const import *
 from .mappings import SBmap
+from .sonnen_batterie_sensor import SonnenBatterieSensor
+from .sonnen_special_entities import SonnenSpecialEntities
 
 # pylint: enable=unused-wildcard-import
 import threading
@@ -45,6 +48,7 @@ async def async_unload_entry(hass, entry):
     """Unload a config entry."""
     ## we dont have anything special going on.. unload should just work, right?
     ##bridge = hass.data[DOMAIN].pop(entry.data['host'])
+
     return 
 
 async def async_setup_entry(hass, config_entry,async_add_entities):
@@ -68,8 +72,11 @@ async def async_setup_entry(hass, config_entry,async_add_entities):
     coordinator = SonnenBatterieCoordinator(hass, sonnenInst, async_add_entities, updateIntervalSeconds, debug_mode,config_entry.entry_id)
 
     await coordinator.async_config_entry_first_refresh()
-    
-    
+
+    LOGGER.info("Preparing special entities")
+    sonnenspecialentities = SonnenSpecialEntities(hass, sonnenInst, async_add_entities, coordinator)
+    sonnenspecialentities.start() 
+    LOGGER.info("Prepared special entities")    
     LOGGER.info('Init done')
     return True
 
@@ -106,86 +113,6 @@ def generateDeviceInfo(configentry_id,systemdata):
                 #via_device=(hue.DOMAIN, self.api.bridgeid),
             )
 
-class SonnenBatterieSensor(CoordinatorEntity,SensorEntity):
-    def __init__(self,id,deviceinfo,coordinator,name=None):
-        self._attributes = {}
-        self._state = "0"
-        self._deviceinfo=deviceinfo
-        self.coordinator=coordinator
-        self.entity_id = id
-        if name is None:
-            name = id
-        self._name = name
-        super().__init__(coordinator)
-        LOGGER.info("Create Sensor {0}".format(id))
-
-    @property
-    def device_info(self) -> DeviceInfo:
-        """Return the device info."""
-        return self._deviceinfo
-        
-
-
-    def set_state(self, state):
-        """Set the state."""
-        if self._state==state:
-            return
-        self._state = state
-        if self.hass is None:
-            LOGGER.warning("hass not set, sensor: {} ".format(self.name))
-            return
-        self.schedule_update_ha_state()
-        #try:
-        #self.schedule_update_ha_state()
-        #except:
-        #    LOGGER.error("Failing sensor: {} ".format(self.name))
-
-    def set_attributes(self, attributes):
-        """Set the state attributes."""
-        self._attributes = attributes
-
-    @property
-    def unique_id(self) -> str:
-        """Return the unique ID for this sensor."""
-        return self.entity_id
-
-    @property
-    def should_poll(self):
-        """Only poll to update phonebook, if defined."""
-        return False
-
-    @property
-    def device_state_attributes(self):
-        """Return the state attributes."""
-        return self._attributes
-
-    @property
-    def state(self):
-        """Return the state of the device."""
-        return self._state
-
-    @property
-    def name(self):
-        """Return the name of the sensor."""
-        return self._name
-
-    def update(self):
-        LOGGER.info("update " + self.entity_id)
-
-    @property
-    def unit_of_measurement(self):
-        """Return the unit of measurement."""
-        return self._attributes.get("unit_of_measurement", None)
-
-    @property
-    def device_class(self):
-        """Return the device_class."""
-        return self._attributes.get("device_class", None)
-
-    @property
-    def state_class(self):
-        """Return the unit of measurement."""
-        return self._attributes.get("state_class", None)
 
 
 class SonnenBatterieCoordinator(DataUpdateCoordinator):
@@ -223,9 +150,11 @@ class SonnenBatterieCoordinator(DataUpdateCoordinator):
 
         # placeholders, will be filled later
         self.serial = ""
+        self.model_name = ""
         self.allSensorsPrefix = ""
         self.deviceName="to be set"
-    async def updateData(self):
+        
+    async def updateData(self) -> bool:
         try:        ##ignore errors here, may be transient
             self.latestData["battery"]        = await self.hass.async_add_executor_job(self.sbInst.get_battery);
             self.latestData["battery_system"] = await self.hass.async_add_executor_job(self.sbInst.get_batterysystem);
@@ -233,12 +162,18 @@ class SonnenBatterieCoordinator(DataUpdateCoordinator):
             self.latestData["powermeter"]     = await self.hass.async_add_executor_job(self.sbInst.get_powermeter);
             self.latestData["status"]         = await self.hass.async_add_executor_job(self.sbInst.get_status);
             self.latestData["systemdata"]     = await self.hass.async_add_executor_job(self.sbInst.get_systemdata);
-            
+            # report if we suceeded or not, the calling cose can then decide how to progress
+            resp =  True 
+        except requests.exceptions.Timeout as e:
+            LOGGER.warn("Timeout getting data "+str(type(e))+", details "+str(e))    
+            resp =  False
         except:
             e = traceback.format_exc()
             LOGGER.error(e)
+            resp =  False
         if self.debug:
             self.SendAllDataToLog();
+        return resp
 
        
 
@@ -254,6 +189,10 @@ class SonnenBatterieCoordinator(DataUpdateCoordinator):
         #Create/Update the Main Sensor, named after the battery serial
         systemdata = self.latestData["systemdata"]
         deviceinfo=generateDeviceInfo(self.device_id,systemdata)
+
+        # save it away for later use by spoecial entities
+        self.initialDeviceInfo = deviceinfo
+            
         serial = systemdata["DE_Ticket_Number"]
         if self.sensor is None:
             self.sensor =  SonnenBatterieSensor(id="sensor.{0}_{1}".format(DOMAIN, serial),deviceinfo=deviceinfo,coordinator=self,name=serial)
@@ -267,6 +206,11 @@ class SonnenBatterieCoordinator(DataUpdateCoordinator):
             statedisplay = "discharging"
 
         # let's do this just once
+        if self.model_name == "":
+            if "ERP_ArticleName" in self.latestData["systemdata"]:
+                self.model_name = self.latestData["systemdata"]["ERP_ArticleName"]
+            else:
+                self.model_name = "UNKNOWN"
         if self.serial == "":
             if "DE_Ticket_Number" in self.latestData["systemdata"]:
                 self.serial = self.latestData["systemdata"]["DE_Ticket_Number"]

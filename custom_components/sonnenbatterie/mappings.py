@@ -47,6 +47,12 @@ SBmap = {
           "class":          SensorDeviceClass.ENERGY,
           "convert":        int,
         },
+        "model_name": {
+          "sensor":         "model_name",
+          "friendly_name":  "Battery model name",
+          "unit":           None,
+          "class":          None,
+        },
       },
     },
     "grid_information": {
@@ -91,8 +97,8 @@ SBmap = {
     "modules": {
       "sensor":         "module_count",
       "friendly_name":  "Battery module count",
-      "unit":           None,
-      "class":          None,
+      "unit":           "",
+      "class":          SensorDeviceClass.BATTERY,
     },
   },
   "inverter": {
@@ -208,8 +214,8 @@ SBmap = {
     "SystemStatus": {
       "sensor":         "systemstatus",
       "friendly_name":  "System Status",
-      "unit":           None,
-      "class":          None,
+      "unit":           "",
+      "class":          SensorDeviceClass.BATTERY,
     },
   }
 }

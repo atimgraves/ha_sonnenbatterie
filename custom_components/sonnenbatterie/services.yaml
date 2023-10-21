@@ -1,0 +1,141 @@
+sonnen_set_battery_reserve_absolute:
+  name: Set Battery Reserve to an absolute value
+  description: Sets the minimum discharge level of your battery in absolute terms, this is usually held for power cuts. The battery will stop discharging when it reaches this reserve level. Setting a number greater than the current state of charge will result in the battery immediately sttarting to charge until the reserve level is met.
+  fields:
+    sonnen_battery_reserve_level_absolute:
+      name: BatteryReserveLevelAbcolute
+      description: The new reserve level you want to apply at an absolute percentage.
+      example: 15
+      default: 5
+      required: true
+      selector:
+        number:
+          min: 0
+          max: 100
+
+sonnen_set_battery_reserve_relative:
+  name: Set Battery Reserve to the current charge level
+  description: Sets the minimum discharge level of your battery to the current charge level. The battery will stop discharging at this point.
+
+sonnen_set_battery_reserve_relative_with_offset:
+  name: Set Battery Reserve relative to the current charge level with an offset
+  description: Sets the minimum discharge level of your battery to the offset relatove to the current charge level, this is usually held for power cuts. The battery will stop discharging at this point. Setting a number greater than the current state of charge will result in the battery immediately starting to charge until the reserve level is met, a number beloe the current state of charge will let the battery continue to discharge until it's charge hits the specified level.
+  fields:
+    sonnen_battery_reserve_level_relative_offset:
+      name: BatteryReserveLevelRelativeOffset
+      description: The reserve level relative to the current state of charge you want to apply.
+      example: 0
+      default: 0
+      required: true
+      selector:
+        number:
+          min: -100
+          max: 100
+
+sonnen_set_battery_reserve_relative_with_minimum:
+  name: Set Battery Reserve relative to the current charge level with miniumum
+  description: Sets the minimum discharge level of your battery to the current charge level or the specified minimum (which ever is higher). The battery will stop discharging at this point.  Setting a number greater than the current state of charge will result in the battery immediately starting to charge until the reserve level is met, a number beloe the current state of charge will let the battery continue to discharge until it's charge hits the specified level.
+  fields:
+    sonnen_battery_reserve_level_minimum:
+      name: MinimumBatteryReserveLevel
+      description: The minimum reserve level, if the current state of charge adjusted for the offset is less than this then this minimum will be used instead.
+      example: 50
+      default: 50
+      required: true
+      selector:
+        number:
+          min: 0
+          max: 100
+
+sonnen_set_battery_reserve_relative_with_offset_and_minimum:
+  name: Set Battery Reserve relative to the current charge level wth an offset, but no lover than the specified minimum
+  description: Sets the minimum discharge level of your battery to the offset relative to the current charge level or the specified minimum (which ever is higher), this is usually held for power cuts. The battery will stop discharging at this point. Setting a number greater than the current state of charge will result in the battery immediately starting to charge until the reserve level is met, a number beloe the current state of charge will let the battery continue to discharge until it's charge hits the specified level.
+  fields:
+    sonnen_battery_reserve_level_relative_offset:
+      name: BatteryReserveLevelRelativeOffset
+      description: The reserve level relative to the current state of charge you want to apply.
+      example: 0
+      default: 0
+      required: true
+      selector:
+        number:
+          min: -100
+          max: 100
+    sonnen_battery_reserve_level_minimum:
+      name: MinimumBatteryReserveLevel
+      description: The minimum reserve level, if the current state of charge adjusted for the offset is less than this then this minimum will be used instead.
+      example: 50
+      default: 50
+      required: true
+      selector:
+        number:
+          min: 0
+          max: 100
+
+sonnen_set_battery_operating_mode:
+  name: Set the battery operating mode
+  description: Sets the operating mode of the battery from one of the provided choices, note that not all modes are supported by all batteries, that different sonnen batteries may interpret these choices in different ways and only modes that we think are common are listed here
+  fields:
+    sonnen_battery_operating_mode:
+      name: SonnenOperatingMode
+      description: The operating mode to set.
+      example: "Automatic"
+      default: "Automatic"
+      required: true
+      selector:
+        select:
+          options:
+            - "Automatic"
+            - "Manual"
+            - "Time Of Use Schedule"
+
+sonnen_set_manual_flow_rate:
+  name: Set the battery flow rate manually
+  description: Sets the flow rate of the battery which must be in manual mode to take effect. The Battery in/out power entity represent the actuall flows. This routine will attempt to set a maximum rate based on the battery if it can, but will allow up to 10Kw if the battery can't be identified, you should ensure you never exceed the rating of your battery and are accepting responsibility to any damage caused by using this setting.
+  fields:
+    sonnen_battery_flow_rate:
+      name: SonnenFlowRate
+      description: The flow rate to set in watts. A postive rate means it will discharge (so powering the house or feeding into the grid), and a negative flow rate means it will charge (so drawing power from external sources like panels or the grid)
+      example: 1000
+      default: 0
+      required: true
+      selector:
+        number:
+          min: -10000
+          max: 10000
+
+
+sonnen_set_tou_schedule:
+  name: Set the time of use schedule for charging
+  description: Sets the time of use schedule when charging, note that this defines the time periods when you want to stop discharging and charge to full.
+  fields:
+    tou_start:
+      name: Time Of Use Start charing
+      description: The start time for the time ouf use charging window, seconds are ignored. If this is after the end time then the end time is assumed to be the following day
+      example: "23:30"
+      default: "23:30"
+      required: true
+      selector:
+        time:
+          min: "00:00:00"
+          max: "23:59:59"
+    tou_end:
+      name: Time Of Use End charing
+      description: The end time for the time ouf use charging window, seconds are ignored. If this is before the start time then the end time is assumed to be the following day
+      example: "05:30"
+      default: "05:30"
+      required: true
+      selector:
+        time:
+          min: "00:00:00"
+          max: "23:59:59"
+    tou_max_incomming_power_in_kw:
+      name: Time Of Use max incomming power in Kw
+      description: The maximum power that the household can draw in Kw, the battery limits it's charge rate to ensure that the househoild as a while remains below this.
+      example: 10
+      default: 20
+      required: true
+      selector:
+        number:
+          min: 5
+          max: 46
