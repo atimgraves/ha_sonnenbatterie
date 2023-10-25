@@ -82,7 +82,7 @@ class SonnenBatteryTOUSchedule(CoordinatorEntity, TextEntity):
        
     def setUpdateInternal(self, updateIntervalInSeconds:int) :
         self._coordinator.update_interval = timedelta(seconds=updateIntervalInSeconds)        
-        self.LOGGER.warn("SonnenBatteryTOUSchedule setUpdateInternal setting frequency "+(str(updateIntervalInSeconds)))
+        self.LOGGER.info("SonnenBatteryTOUSchedule setUpdateInternal setting frequency "+(str(updateIntervalInSeconds)))
 
 
     async def sonnenbatterie_set_tou_update_frequency(self, call):
@@ -124,7 +124,7 @@ class SonnenBatteryTOUSchedule(CoordinatorEntity, TextEntity):
         try:
             self.LOGGER.debug("SonnenBatteryTOUSchedule update state")
             schedule = self.sonnenbatterie.get_time_of_use_schedule_as_schedule()
-            self.LOGGER.warn("SonnenBatteryTOUSchedule update state schedule is "+schedule.get_as_string())
+            self.LOGGER.debug("SonnenBatteryTOUSchedule update state schedule is "+schedule.get_as_string())
             # this will return an array, for now we're assuming the following
             # if there are no entries then there is no TOU schedule
             # if there is one entry then the tou start and end come from that, the max power comes from the first

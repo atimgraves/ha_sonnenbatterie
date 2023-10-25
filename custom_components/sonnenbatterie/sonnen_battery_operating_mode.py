@@ -108,7 +108,7 @@ class SonnenBatteryOperatingMode(CoordinatorEntity, SelectEntity, TextEntity):
    
     def setUpdateInternal(self, updateIntervalInSeconds:int) :
         self._coordinator.update_interval = timedelta(seconds=updateIntervalInSeconds)
-        self.LOGGER.warn("SonnenBatteryOperatingMode setUpdateInternal setting frequency "+(str(updateIntervalInSeconds)))
+        self.LOGGER.info("SonnenBatteryOperatingMode setUpdateInternal setting frequency "+(str(updateIntervalInSeconds)))
 
     async def sonnenbatterie_set_operating_mode_update_frequency(self, call):
         self.LOGGER.debug("SonnenBatteryOperatingMode sonnenbatterie_set_operating_mode_update_frequency  starting")

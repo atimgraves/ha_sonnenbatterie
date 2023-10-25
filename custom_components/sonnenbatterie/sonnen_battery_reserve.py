@@ -145,7 +145,7 @@ class SonnenBatteryReserve(CoordinatorEntity, NumberEntity):
 
     def setUpdateInternal(self, updateIntervalInSeconds:int) :
         self._coordinator.update_interval = timedelta(seconds=updateIntervalInSeconds)
-        self.LOGGER.warn("SonnenBatteryReserve setUpdateInternal setting frequency "+(str(updateIntervalInSeconds)))
+        self.LOGGER.info("SonnenBatteryReserve setUpdateInternal setting frequency "+(str(updateIntervalInSeconds)))
 
     async def sonnenbatterie_set_battery_reserve_update_frequency(self, call):
         self.LOGGER.debug("SonnenBatteryReserve sonnenbatterie_set_battery_reserve_update_frequency  starting")
@@ -233,7 +233,7 @@ class SonnenBatteryReserve(CoordinatorEntity, NumberEntity):
           newReserve = self.sonnenbatterie.get_battery_reserve()
           self._native_value = newReserve
           self._state = self._native_value
-          self.LOGGER.warn("SonnenBatteryReserve update state retrieved reserve is "+str(newReserve))
+          self.LOGGER.debug("SonnenBatteryReserve update state retrieved reserve is "+str(newReserve))
           self.async_write_ha_state()
         except Exception as e:
             self.LOGGER.warn("SonnenBatteryReserve Unable to get battery reserve, type "+str(type(e))+", details "+str(e))         
