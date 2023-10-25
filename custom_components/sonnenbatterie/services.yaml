@@ -72,6 +72,21 @@ sonnen_set_battery_reserve_relative_with_offset_and_minimum:
           min: 0
           max: 100
 
+sonnen_get_battery_reserve_update_frequency:
+  name: Set the battery reserve update frequency
+  description: Sets the update frequency to retrieve the reserve of the battery
+  fields:
+    sonnen_battery_get_battery_reserve_update_frequency:
+      name: SonnenBatteryReserveUpdateFrequency
+      description: The update frequency to check for battery reserve changes in seconds
+      example: 30
+      default: 60
+      required: true
+      selector:
+        number:
+          min: 10
+          max: 300
+
 sonnen_set_battery_operating_mode:
   name: Set the battery operating mode
   description: Sets the operating mode of the battery from one of the provided choices, note that not all modes are supported by all batteries, that different sonnen batteries may interpret these choices in different ways and only modes that we think are common are listed here
@@ -88,6 +103,21 @@ sonnen_set_battery_operating_mode:
             - "Automatic"
             - "Manual"
             - "Time Of Use Schedule"
+
+sonnen_get_operating_mode_update_frequency:
+  name: Set the battery operating mode update frequency
+  description: Sets the update frequency to retrieve the operating mode of the battery
+  fields:
+    sonnen_battery_get_operating_mode_update_frequency:
+      name: SonnenOperatingModeUpdateFrequency
+      description: The update frequency to check for operating mode changes in seconds
+      example: 30
+      default: 60
+      required: true
+      selector:
+        number:
+          min: 10
+          max: 300
 
 sonnen_set_manual_flow_rate:
   name: Set the battery flow rate manually
@@ -139,3 +169,19 @@ sonnen_set_tou_schedule:
         number:
           min: 5
           max: 46
+
+
+sonnen_get_tou_update_frequency:
+  name: Set the battery time of use schedule update frequency
+  description: Sets the update frequency to retrieve the time of use schedule of the battery
+  fields:
+    sonnen_battery_get_tou_update_frequency:
+      name: SonnenTOUUpdateFrequency
+      description: The update frequency to check for battery time of use schedule changes in seconds
+      example: 30
+      default: 60
+      required: true
+      selector:
+        number:
+          min: 10
+          max: 300

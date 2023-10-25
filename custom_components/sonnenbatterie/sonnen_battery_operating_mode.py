@@ -43,14 +43,14 @@ class SonnenBatteryOperatingMode(CoordinatorEntity, SelectEntity, TextEntity):
         self._attr_device_class = SensorDeviceClass.BATTERY
         self._attr_state_class = SensorStateClass.MEASUREMENT
         self._attr_icon = "mdi:auto-mode"
-        self.coordinator = DataUpdateCoordinator(hass, LOGGER, name="Sonnen battery special sensors operating mode", update_interval=timedelta(seconds=UPDATE_FREQUENCY_OPERATING_MODE), update_method=self.async_handle_coordinator_update)
+        self._coordinator = DataUpdateCoordinator(hass, LOGGER, name="Sonnen battery special sensors operating mode", update_interval=timedelta(seconds=DEFAULT_UPDATE_FREQUENCY_OPERATING_MODE), update_method=self.async_handle_coordinator_update)
         tempNamesMappings = SONNEN_BATTERY_NAMES_MAPPINGS.get(self.mainCoordinator.model_name, SONNEN_MODE_NICKNAME_TO_MODE_NAME_DEFAULT)
         self.max_charge_rate = SONNEN_BATTERY_TO_MAX_CHARGE.get(self.mainCoordinator.model_name, SONNEN_MODEL_UNKNOWN_NAME_MAX_CHARGE)
         self.max_discharge_rate = SONNEN_BATTERY_TO_MAX_DISCHARGE.get(self.mainCoordinator.model_name, SONNEN_MODEL_UNKNOWN_NAME_MAX_DISCHARGE)
         # now map the temp names to lower case keys
         self.modeNicknamesToModeName = {k.lower():v for k,v in tempNamesMappings.items()}
         self.LOGGER.info("SonnenBatteryOperatingMode node nicknames to modes for model_name "+model_name+" is "+str(self.modeNicknamesToModeName))
-        super().__init__(self.coordinator)
+        super().__init__(self._coordinator)
         async_add_entities([self])
         # register the services
         if not hass.services.has_service(DOMAIN, SERVICE_SET_OPERATING_MODE) :
@@ -85,9 +85,36 @@ class SonnenBatteryOperatingMode(CoordinatorEntity, SelectEntity, TextEntity):
                     }
                 ),
             ) 
-        self.LOGGER.debug("SonnenBatteryOperatingMode setup service "+SERVICE_SET_FLOW_RATE)
+        self.LOGGER.debug("SonnenBatteryOperatingMode setup service "+SERVICE_SET_FLOW_RATE) 
+
+        if not hass.services.has_service(DOMAIN, SERVICE_GET_OPERATING_MODE_UPDATE_FREQUENCY) :
+            hass.services.async_register(
+                DOMAIN,
+                SERVICE_GET_OPERATING_MODE_UPDATE_FREQUENCY, 
+                verify_domain_control(hass, DOMAIN)(self.sonnenbatterie_set_operating_mode_update_frequency),
+                # we try and have voluptuous make the more lower case before checking it's in the list
+                vol.Schema(
+                    {
+                        vol.Required(SERVICE_ATTR_GET_OPERATING_MODE_UPDATE_FREQUENCY): vol.All(
+                            vol.Coerce(int), vol.Range(min=10, max=300),
+                        )
+                    }
+                ),
+            ) 
+        self.LOGGER.debug("SonnenBatteryOperatingMode setup service "+SERVICE_GET_OPERATING_MODE_UPDATE_FREQUENCY)
         self.LOGGER.info("SonnenBatteryOperatingMode initialised")
+
+
    
+    def setUpdateInternal(self, updateIntervalInSeconds:int) :
+        self._coordinator.update_interval = timedelta(seconds=updateIntervalInSeconds)
+        self.LOGGER.warn("SonnenBatteryOperatingMode setUpdateInternal setting frequency "+(str(updateIntervalInSeconds)))
+
+    async def sonnenbatterie_set_operating_mode_update_frequency(self, call):
+        self.LOGGER.debug("SonnenBatteryOperatingMode sonnenbatterie_set_operating_mode_update_frequency  starting")
+        newFrequency = int(call.data[SERVICE_ATTR_GET_OPERATING_MODE_UPDATE_FREQUENCY])
+        await self.hass.async_add_executor_job(self.setUpdateInternal, newFrequency)
+    
     @property
     def device_info(self) -> DeviceInfo:
         """Return the device info."""

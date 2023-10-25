@@ -44,8 +44,8 @@ class SonnenBatteryReserve(CoordinatorEntity, NumberEntity):
         self._device_class = self._attr_device_class
         self.state_class = SensorStateClass.MEASUREMENT
         self._attr_icon = "mdi:battery"
-        self.coordinator = DataUpdateCoordinator(hass, LOGGER, name="Sonnen battery special sensors battery reserve mode", update_interval=timedelta(seconds=UPDATE_FREQUENCY_BATTERY_RESERVE), update_method=self.async_handle_coordinator_update)
-        super().__init__(self.coordinator)
+        self._coordinator = DataUpdateCoordinator(hass, LOGGER, name="Sonnen battery special sensors battery reserve mode", update_interval=timedelta(seconds=DEFAULT_UPDATE_FREQUENCY_BATTERY_RESERVE), update_method=self.async_handle_coordinator_update)
+        super().__init__(self._coordinator)
         async_add_entities([self])
         self.LOGGER.info("SonnenBatteryReserve initialised")
 
@@ -122,9 +122,35 @@ class SonnenBatteryReserve(CoordinatorEntity, NumberEntity):
             )
         self.LOGGER.info("SonnenBatteryReserve initialised added service "+SERVICE_SET_BATTERY_RESERVE_RELATIVE_WITH_OFFSET_AND_MINIMUM)
 
+        if not hass.services.has_service(DOMAIN, SERVICE_GET_BATTERY_RESERVE_UPDATE_FREQUENCY) :
+            hass.services.async_register(
+                DOMAIN,
+                SERVICE_GET_BATTERY_RESERVE_UPDATE_FREQUENCY, 
+                verify_domain_control(hass, DOMAIN)(self.sonnenbatterie_set_battery_reserve_update_frequency),
+                # we try and have voluptuous make the more lower case before checking it's in the list
+                vol.Schema(
+                    {
+                        vol.Required(SERVICE_ATTR_GET_BATTERY_RESERVE_UPDATE_FREQUENCY): vol.All(
+                            vol.Coerce(int), vol.Range(min=10, max=300),
+                        )
+                    }
+                ),
+            ) 
+        self.LOGGER.debug("SonnenBatteryOperatingMode setup service "+SERVICE_GET_BATTERY_RESERVE_UPDATE_FREQUENCY)
+
+
         self.LOGGER.info("SonnenBatteryReserve initialised")
 
 
+
+    def setUpdateInternal(self, updateIntervalInSeconds:int) :
+        self._coordinator.update_interval = timedelta(seconds=updateIntervalInSeconds)
+        self.LOGGER.warn("SonnenBatteryReserve setUpdateInternal setting frequency "+(str(updateIntervalInSeconds)))
+
+    async def sonnenbatterie_set_battery_reserve_update_frequency(self, call):
+        self.LOGGER.debug("SonnenBatteryReserve sonnenbatterie_set_battery_reserve_update_frequency  starting")
+        newFrequency = int(call.data[SERVICE_ATTR_GET_BATTERY_RESERVE_UPDATE_FREQUENCY])
+        await self.hass.async_add_executor_job(self.setUpdateInternal, newFrequency)
 
     @property
     def device_info(self) -> DeviceInfo:
@@ -196,8 +222,6 @@ class SonnenBatteryReserve(CoordinatorEntity, NumberEntity):
         self.LOGGER.warn("SonnenBatteryReserve set_native_value reserve targeting "+str(new_reserve_absolute))
         self.setter_absolute(new_reserve_absolute)
 
-        deviceinfo=generateDeviceInfo(self.device_id,systemdata)
-
     @callback
     async def async_handle_coordinator_update(self) -> None:
         await self.hass.async_add_executor_job(self.update_state)
@@ -209,7 +233,7 @@ class SonnenBatteryReserve(CoordinatorEntity, NumberEntity):
           newReserve = self.sonnenbatterie.get_battery_reserve()
           self._native_value = newReserve
           self._state = self._native_value
-          self.LOGGER.debug("SonnenBatteryReserve update state retrieved reserve is "+str(newReserve))
+          self.LOGGER.warn("SonnenBatteryReserve update state retrieved reserve is "+str(newReserve))
           self.async_write_ha_state()
         except Exception as e:
             self.LOGGER.warn("SonnenBatteryReserve Unable to get battery reserve, type "+str(type(e))+", details "+str(e))         
