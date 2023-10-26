@@ -35,6 +35,7 @@ class SonnenBatteryTOUSchedule(CoordinatorEntity, TextEntity):
         self.sonnenbatterie = sonnenbatterie
         self.hass = hass
         self.mainCoordinator = mainCoordinator
+        self._device_info = self.mainCoordinator.initialDeviceInfo
         self.model_name = model_name
         self._attr_icon = "mdi:clock"
         self._coordinator = DataUpdateCoordinator(hass, LOGGER, name="Sonnen battery special sensors time of use", update_interval=timedelta(seconds=DEFAULT_UPDATE_FREQUENCY_TOU_SCHEDULE), update_method=self.async_handle_coordinator_update)
@@ -93,7 +94,7 @@ class SonnenBatteryTOUSchedule(CoordinatorEntity, TextEntity):
     @property
     def device_info(self) -> DeviceInfo:
         """Return the device info."""
-        return self.mainCoordinator.initialDeviceInfo
+        return self._device_info
     
     def set_tou_schedule(self, touStart:time, touEnd:time, touMaxPowerInKw:int):
         self.LOGGER.info("SonnenBatteryTOUSchedule set_tou_schedule start time is "+time.strftime(touStart, TIME_FORMAT)+" end time is "+time.strftime(touEnd, TIME_FORMAT)+", max powerr in kw is "+str(touMaxPowerInKw))

@@ -153,6 +153,7 @@ class SonnenBatterieCoordinator(DataUpdateCoordinator):
         self.model_name = ""
         self.allSensorsPrefix = ""
         self.deviceName="to be set"
+        self.initialDeviceInfo = None
         
     async def updateData(self) -> bool:
         try:        ##ignore errors here, may be transient

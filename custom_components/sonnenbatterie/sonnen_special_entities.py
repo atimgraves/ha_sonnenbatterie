@@ -39,9 +39,10 @@ class SonnenSpecialEntities():
                 # this will also mean that the model number will have been retrieved as that's done first
                 prefix = self.mainCoordinator.allSensorsPrefix
                 serial = self.mainCoordinator.serial
+                deviceInfo = self.mainCoordinator.initialDeviceInfo
                 LOGGER.warn("SonnenSpecialEntities watcher loop prefix is "+prefix)
-                if (prefix == "") or (serial == ""):
-                    LOGGER.warn("SonnenSpecialEntities in watcher processing mainCoordinator prefix or serial is not yet available, waiting")
+                if (prefix == "") or (serial == "") or (deviceInfo == None):
+                    LOGGER.warn("SonnenSpecialEntities in watcher processing mainCoordinator prefix, serial or deviceInfo is not yet available, waiting")
                 else:
                     LOGGER.warn("SonnenSpecialEntities in watcher processing, prefix is "+prefix)
                     self.configure_sensors(prefix)

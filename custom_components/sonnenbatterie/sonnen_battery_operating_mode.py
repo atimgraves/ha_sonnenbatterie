@@ -28,7 +28,7 @@ class SonnenBatteryOperatingMode(CoordinatorEntity, SelectEntity, TextEntity):
         self.LOGGER.info("SonnenBatteryOperatingMode init with prefix "+allSensorsPrefix)
         self._unique_id= "{}{}".format(allSensorsPrefix,"operating_mode")
         self.entity_id=self._unique_id
-        self.LOGGER.info("SonnenBatteryOperatingMode id is "+self._unique_id+" model_name is "+model_name)
+        self.LOGGER.warn("SonnenBatteryOperatingMode id is "+self._unique_id+" model_name is "+model_name)
         self._attr_has_entity_name = True
         self._name = "Operating mode"
         self._attr_mode = TextMode.TEXT
@@ -38,6 +38,7 @@ class SonnenBatteryOperatingMode(CoordinatorEntity, SelectEntity, TextEntity):
         self.sonnenbatterie = sonnenbatterie
         self.hass = hass
         self.mainCoordinator = mainCoordinator
+        self._device_info = self.mainCoordinator.initialDeviceInfo
         self.model_name = model_name
         self._options = SONNEN_BATTERY_TO_OPERATING_MODES.get(self.mainCoordinator.model_name, SONNEN_BATTERY_ALL_OPERATING_MODES) 
         self._attr_device_class = SensorDeviceClass.BATTERY
@@ -118,7 +119,7 @@ class SonnenBatteryOperatingMode(CoordinatorEntity, SelectEntity, TextEntity):
     @property
     def device_info(self) -> DeviceInfo:
         """Return the device info."""
-        return self.mainCoordinator.initialDeviceInfo
+        return self._device_info
     
     @callback
     async def async_handle_coordinator_update(self) -> None:

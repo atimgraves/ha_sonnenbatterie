@@ -33,6 +33,7 @@ class SonnenBatteryReserve(CoordinatorEntity, NumberEntity):
         self.sonnenbatterie = sonnenbatterie
         self.model_name = model_name
         self.mainCoordinator = mainCoordinator
+        self._device_info = self.mainCoordinator.initialDeviceInfo
         self._attr_entity_config = EntityCategory.CONFIG
         self._attr_native_max_value = 100.0
         self._attr_native_min_value = 0.0
@@ -42,6 +43,7 @@ class SonnenBatteryReserve(CoordinatorEntity, NumberEntity):
         self._enabled_by_default = True
         self._attr_device_class = NumberDeviceClass.BATTERY
         self._device_class = self._attr_device_class
+        self._device_info = mainCoordinator.initialDeviceInfo
         self.state_class = SensorStateClass.MEASUREMENT
         self._attr_icon = "mdi:battery"
         self._coordinator = DataUpdateCoordinator(hass, LOGGER, name="Sonnen battery special sensors battery reserve mode", update_interval=timedelta(seconds=DEFAULT_UPDATE_FREQUENCY_BATTERY_RESERVE), update_method=self.async_handle_coordinator_update)
@@ -155,7 +157,7 @@ class SonnenBatteryReserve(CoordinatorEntity, NumberEntity):
     @property
     def device_info(self) -> DeviceInfo:
         """Return the device info."""
-        return self.mainCoordinator.initialDeviceInfo
+        return self._device_info
     
     # this is probabaly a horrendous and very non python / HA way to do things, but I had all 
     # sorts of errors around hass async execution and I just couldn't figure a solution out
