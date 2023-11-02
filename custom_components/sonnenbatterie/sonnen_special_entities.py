@@ -1,6 +1,8 @@
 import threading
+import traceback
 from .const import *
 from datetime import time, timedelta
+from .setting_manager import SonnenSettingsManager
 from sonnenbatterie import sonnenbatterie
 from .sonnen_battery_reserve import SonnenBatteryReserve
 from .sonnen_battery_operating_mode import SonnenBatteryOperatingMode
@@ -22,9 +24,10 @@ class SonnenSpecialEntities():
         self.mainCoordinator = mainCoordinator
         self.sensors_configured = False
         self.stopped = threading.Event()
+        self.settingManager = SonnenSettingsManager(hass)
         LOGGER.info("Completed SonnenSpecialEntities __init__ processing")
 
-    def start(self):
+    async def start(self):
         LOGGER.info("Starting SonnenSpecialEntities waiting to initialise thread")
         threading.Thread(target=self.watcher).start()
 
@@ -49,7 +52,7 @@ class SonnenSpecialEntities():
                     # finished, lets break out of the loop
                     break
             except Exception as e:
-                LOGGER.error("SonnenSpecialEntities in watcher processing mainCoordinator, type "+str(type(e))+", details "+str(e))
+                LOGGER.error("SonnenSpecialEntities in watcher processing mainCoordinator, type "+str(type(e))+", details "+str(e)+" traceback "+traceback.format_exc())
                 
             LOGGER.warn("SonnenSpecialEntities in watcher about to wait")
             # hang around a bit, tbhis will be interrupted if the stop is called
@@ -60,8 +63,8 @@ class SonnenSpecialEntities():
     def configure_sensors(self, prefix):
         LOGGER.warn("Configuring SonnenSpecialEntities sensors with prefix "+prefix)
         model_name=self.mainCoordinator.model_name
-        self.sonnenbatteryreserve = SonnenBatteryReserve(self.hass, self.sonnenbatterie, prefix, model_name, self.async_add_entities, self.mainCoordinator)
-        self.sonnenbatteryoperatingmode = SonnenBatteryOperatingMode(self.hass, self.sonnenbatterie, prefix, model_name, self.async_add_entities, self.mainCoordinator)
-        self.sonnenbatterytouschedule = SonnenBatteryTOUSchedule(self.hass, self.sonnenbatterie, prefix, model_name, self.async_add_entities, self.mainCoordinator)
+        self.sonnenbatteryreserve = SonnenBatteryReserve(self.hass, self.sonnenbatterie, prefix, model_name, self.async_add_entities, self.mainCoordinator, self.settingManager)
+        self.sonnenbatteryoperatingmode = SonnenBatteryOperatingMode(self.hass, self.sonnenbatterie, prefix, model_name, self.async_add_entities, self.mainCoordinator, self.settingManager)
+        self.sonnenbatterytouschedule = SonnenBatteryTOUSchedule(self.hass, self.sonnenbatterie, prefix, model_name, self.async_add_entities, self.mainCoordinator, self.settingManager)
 
         

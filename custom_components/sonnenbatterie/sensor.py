@@ -75,7 +75,7 @@ async def async_setup_entry(hass, config_entry,async_add_entities):
 
     LOGGER.info("Preparing special entities")
     sonnenspecialentities = SonnenSpecialEntities(hass, sonnenInst, async_add_entities, coordinator)
-    sonnenspecialentities.start() 
+    await sonnenspecialentities.start() 
     LOGGER.info("Prepared special entities")    
     LOGGER.info('Init done')
     return True

@@ -18,12 +18,13 @@ from homeassistant.components.sensor import (
     SensorDeviceClass,
 )
 from homeassistant.helpers.service import verify_domain_control
+from .setting_manager import SonnenSettingsManager
 from sonnenbatterie import sonnenbatterie
 from sonnenbatterie.timeofuse import timeofuse, timeofuseschedule
 
 TIME_FORMAT="%H:%M:%S"
 class SonnenBatteryTOUSchedule(CoordinatorEntity, TextEntity):
-    def __init__(self, hass, sonnenbatterie:sonnenbatterie, allSensorsPrefix, model_name, async_add_entities, mainCoordinator):
+    def __init__(self, hass, sonnenbatterie:sonnenbatterie, allSensorsPrefix:str, model_name:str, async_add_entities, mainCoordinator, settingManager:SonnenSettingsManager):
         self.LOGGER = LOGGER
         self.LOGGER.info("SonnenBatteryTOUSchedule init with prefix "+allSensorsPrefix)
         self._unique_id= "{}{}".format(allSensorsPrefix,"tou_schedule")
@@ -38,6 +39,7 @@ class SonnenBatteryTOUSchedule(CoordinatorEntity, TextEntity):
         self._device_info = self.mainCoordinator.initialDeviceInfo
         self.model_name = model_name
         self._attr_icon = "mdi:clock"
+        self._settingManager = settingManager
         self._coordinator = DataUpdateCoordinator(hass, LOGGER, name="Sonnen battery special sensors time of use", update_interval=timedelta(seconds=DEFAULT_UPDATE_FREQUENCY_TOU_SCHEDULE), update_method=self.async_handle_coordinator_update)
         super().__init__(self._coordinator)
         async_add_entities([self])
@@ -75,11 +77,11 @@ class SonnenBatteryTOUSchedule(CoordinatorEntity, TextEntity):
                     }
                 ),
             ) 
-        self.LOGGER.info("SonnenBatteryOperatingMode setup service "+SERVICE_GET_TOU_UPDATE_FREQUENCY)
+        self.LOGGER.info("SonnenBatteryTOUSchedule setup service "+SERVICE_GET_TOU_UPDATE_FREQUENCY)
 
-
-
-        self.LOGGER.info("SonnenBatteryTOUSchedule initialised")
+        self.LOGGER.info("SonnenBatteryTOUSchedule initialised, doing initial update")
+        self.update_state()
+        self.LOGGER.info("SonnenBatteryTOUSchedule initialised, completed initial update")
        
     def setUpdateInternal(self, updateIntervalInSeconds:int) :
         self._coordinator.update_interval = timedelta(seconds=updateIntervalInSeconds)        

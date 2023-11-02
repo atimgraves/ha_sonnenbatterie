@@ -1,6 +1,7 @@
 import threading
 import asyncio
 from .const import *
+from .setting_manager import SonnenSettingsManager
 from .sonnen_flow_rates import SONNEN_BATTERY_TO_MAX_CHARGE, SONNEN_BATTERY_TO_MAX_DISCHARGE, SONNEN_MODEL_UNKNOWN_NAME_MAX_CHARGE, SONNEN_MODEL_UNKNOWN_NAME_MAX_DISCHARGE
 from datetime import time, timedelta
 from gc import callbacks
@@ -23,7 +24,7 @@ from homeassistant.helpers.update_coordinator import (
 
 from homeassistant.helpers.service import verify_domain_control
 class SonnenBatteryOperatingMode(CoordinatorEntity, SelectEntity, TextEntity):
-    def __init__(self, hass, sonnenbatterie:sonnenbatterie,  allSensorsPrefix, model_name,  async_add_entities, mainCoordinator):
+    def __init__(self, hass, sonnenbatterie:sonnenbatterie,  allSensorsPrefix:str, model_name:str,  async_add_entities, mainCoordinator, settingManager:SonnenSettingsManager):
         self.LOGGER = LOGGER
         self.LOGGER.info("SonnenBatteryOperatingMode init with prefix "+allSensorsPrefix)
         self._unique_id= "{}{}".format(allSensorsPrefix,"operating_mode")
@@ -44,6 +45,7 @@ class SonnenBatteryOperatingMode(CoordinatorEntity, SelectEntity, TextEntity):
         self._attr_device_class = SensorDeviceClass.BATTERY
         self._attr_state_class = SensorStateClass.MEASUREMENT
         self._attr_icon = "mdi:auto-mode"
+        self._settingManager = settingManager
         self._coordinator = DataUpdateCoordinator(hass, LOGGER, name="Sonnen battery special sensors operating mode", update_interval=timedelta(seconds=DEFAULT_UPDATE_FREQUENCY_OPERATING_MODE), update_method=self.async_handle_coordinator_update)
         tempNamesMappings = SONNEN_BATTERY_NAMES_MAPPINGS.get(self.mainCoordinator.model_name, SONNEN_MODE_NICKNAME_TO_MODE_NAME_DEFAULT)
         self.max_charge_rate = SONNEN_BATTERY_TO_MAX_CHARGE.get(self.mainCoordinator.model_name, SONNEN_MODEL_UNKNOWN_NAME_MAX_CHARGE)
@@ -58,7 +60,7 @@ class SonnenBatteryOperatingMode(CoordinatorEntity, SelectEntity, TextEntity):
             hass.services.async_register(
                 DOMAIN,
                 SERVICE_SET_OPERATING_MODE, 
-                verify_domain_control(hass, DOMAIN)(self.sonnenbatterie_set_operating_mode),
+                verify_domain_control(hass, DOMAIN)(self.sonnenbatterie_set_operating_mode_by_nickname_async),
                 # we try and have voluptuous make the more lower case before checking it's in the list
                 vol.Schema(
                     {
@@ -103,7 +105,9 @@ class SonnenBatteryOperatingMode(CoordinatorEntity, SelectEntity, TextEntity):
                 ),
             ) 
         self.LOGGER.debug("SonnenBatteryOperatingMode setup service "+SERVICE_GET_OPERATING_MODE_UPDATE_FREQUENCY)
-        self.LOGGER.info("SonnenBatteryOperatingMode initialised")
+        self.LOGGER.info("SonnenBatteryOperatingMode initialised, doing initial update")
+        self.update_state()
+        self.LOGGER.info("SonnenBatteryOperatingMode initialised, completed initial update")
 
 
    
@@ -132,14 +136,19 @@ class SonnenBatteryOperatingMode(CoordinatorEntity, SelectEntity, TextEntity):
         try:
             current_mode = self.sonnenbatterie.get_operating_mode_name() 
             self._current_option = f"{current_mode}"
-            self.LOGGER.debug("SonnenBatteryOperatingMode update state retrieved "+self._current_option)
+            self.LOGGER.debug("SonnenBatteryOperatingMode update state retrieved "+self._current_option)  
+            self.async_write_ha_state() 
+            self.LOGGER.debug("SonnenBatteryOperatingMode update state triggered HA update")
         except Exception as e:
-            LOGGER.warn("SonnenBatteryOperatingMode Unable to get operating mode, type "+str(type(e))+", details "+str(e))     
-        self.async_write_ha_state() 
+            LOGGER.warn("SonnenBatteryOperatingMode Unable to get operating mode, type "+str(type(e))+", details "+str(e))   
 
-    def set_operating_mode(self, modeNickname):
+    def set_operating_mode_by_nickname_sync(self, modeNickname):
         mode = self.modeNicknamesToModeName.get(modeNickname)
         self.LOGGER.info("SonnenBatteryOperatingMode setting mode with nickname "+modeNickname+" which has mapped to mode "+mode)
+        self.set_operating_mode_sync(mode)
+
+    def set_operating_mode_sync(self, mode):
+        self.LOGGER.info("SonnenBatteryOperatingMode setting to mode "+mode)
         try:
             self.sonnenbatterie.set_operating_mode_by_name(mode)
         except Exception as e:
@@ -148,11 +157,17 @@ class SonnenBatteryOperatingMode(CoordinatorEntity, SelectEntity, TextEntity):
         self.update_state()
         #self.schedule_update_ha_state()
 
-    async def sonnenbatterie_set_operating_mode(self, call):
+    async def sonnenbatterie_set_operating_mode_by_nickname_async(self, call):
         self.LOGGER.debug("SonnenBatteryOperatingMode sonnenbatterie_set_operating_mode set operating mode starting")
         modeNickname = str(call.data[SERVICE_ATTR_OPERATING_MODE_MODE]).lower()
         self.LOGGER.info("SonnenBatteryOperatingMode sonnenbatterie_set_operating_mode set operating mode setting nickname "+modeNickname)
-        await self.hass.async_add_executor_job(self.set_operating_mode, modeNickname)
+        mode = self.modeNicknamesToModeName.get(modeNickname)
+        self.LOGGER.info("SonnenBatteryOperatingMode setting mode with nickname "+modeNickname+" which has mapped to mode "+mode)
+        setLambda = lambda: self.sonnenbatterie.set_operating_mode_by_name(mode)
+        checkLambda = lambda: self.sonnenbatterie.get_operating_mode_name() 
+        postLambda= lambda: self.update_state()
+        await self._settingManager.setDesiredSetting(settingName=SETTING_MANAGER_OPERATING_MODE_NAME, targetValue=mode, settingTargetLambda=setLambda, checkTargetLambda=checkLambda, postSetLambda=postLambda, retryInterval=10, retryCount=5)
+        self.LOGGER.info("SonnenBatteryOperatingMode scheduled setting to mode "+mode) 
 
     def set_flow_rate(self, flowRate):
         # a negative flow rate means charging, and so has to be converted to a postive value before being handed to the charge call
@@ -218,7 +233,7 @@ class SonnenBatteryOperatingMode(CoordinatorEntity, SelectEntity, TextEntity):
         """Change the selected option."""
         modeNickname = option.lower()
         self.LOGGER.info("SonnenBatteryOperatingMode async_select_option mode changing to "+modeNickname)
-        await self.hass.async_add_executor_job(self.set_operating_mode. modeNickname)
+        await self.hass.async_add_executor_job(self.set_operating_mode_by_nickname_sync. modeNickname)
 
     
 

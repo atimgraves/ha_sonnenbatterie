@@ -92,3 +92,7 @@ SERVICE_ATTR_GET_TOU_UPDATE_FREQUENCY="sonnen_battery_get_tou_update_frequency"
 TOU_SCHEDULE_MAX_INCOMMING_POWER_IN_KW=100
 TOU_SCHEDULE_MIN_INCOMMING_POWER_IN_KW=1
 
+# these are used to define the names used to control the set operations
+SETTING_MANAGER_BATTERY_RESERVE_NAME="SetBatteryReserve"
+SETTING_MANAGER_OPERATING_MODE_NAME="SetOperatingMode"
+SETTING_MANAGER_TIME_OF_USE_NAME="SetTOU"

@@ -3,6 +3,7 @@ import asyncio
 from .const import *
 from datetime import time, timedelta
 from gc import callbacks
+from .setting_manager import SonnenSettingsManager
 from sonnenbatterie import sonnenbatterie
 from homeassistant.core import callback
 from homeassistant.const import EntityCategory
@@ -21,7 +22,7 @@ from homeassistant.const import PERCENTAGE
 from homeassistant.helpers.service import verify_domain_control
 
 class SonnenBatteryReserve(CoordinatorEntity, NumberEntity):
-    def __init__(self, hass, sonnenbatterie:sonnenbatterie, allSensorsPrefix, model_name, async_add_entities, mainCoordinator):     
+    def __init__(self, hass, sonnenbatterie:sonnenbatterie, allSensorsPrefix:str, model_name:str, async_add_entities, mainCoordinator, settingManager:SonnenSettingsManager):     
         self.LOGGER = LOGGER
         self.LOGGER.info("SonnenBatteryReserve initialising with prefix "+allSensorsPrefix)
         self._unique_id= "{}{}".format(allSensorsPrefix,"battery_reserve") 
@@ -47,6 +48,7 @@ class SonnenBatteryReserve(CoordinatorEntity, NumberEntity):
         self.state_class = SensorStateClass.MEASUREMENT
         self._attr_icon = "mdi:battery"
         self._coordinator = DataUpdateCoordinator(hass, LOGGER, name="Sonnen battery special sensors battery reserve mode", update_interval=timedelta(seconds=DEFAULT_UPDATE_FREQUENCY_BATTERY_RESERVE), update_method=self.async_handle_coordinator_update)
+        self._settingManager = settingManager
         super().__init__(self._coordinator)
         async_add_entities([self])
         self.LOGGER.info("SonnenBatteryReserve initialised")
@@ -140,8 +142,9 @@ class SonnenBatteryReserve(CoordinatorEntity, NumberEntity):
             ) 
         self.LOGGER.debug("SonnenBatteryOperatingMode setup service "+SERVICE_GET_BATTERY_RESERVE_UPDATE_FREQUENCY)
 
-
-        self.LOGGER.info("SonnenBatteryReserve initialised")
+        self.LOGGER.info("SonnenBatteryReserve initialised, doing initial update")
+        self.update_state()
+        self.LOGGER.info("SonnenBatteryReserve initialised, completed initial update")
 
 
 
@@ -175,7 +178,7 @@ class SonnenBatteryReserve(CoordinatorEntity, NumberEntity):
         self.LOGGER.debug("SonnenBatteryReserve set reserve starting")
         new_reserve_absolute = int(call.data[SERVICE_ATTR_SET_BATTERY_RESERVE_LEVEL_ABSOLUTE])
         self.LOGGER.info("SonnenBatteryReserve set reserve targeting "+str(new_reserve_absolute))
-        await self.hass.async_add_executor_job(self.setter_absolute, new_reserve_absolute)
+        # await self.hass.async_add_executor_job(self.setter_absolute, new_reserve_absolute)
 
     def setter_relative(self, reserve_offset):
         try:
