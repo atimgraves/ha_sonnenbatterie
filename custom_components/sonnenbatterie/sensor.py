@@ -165,8 +165,11 @@ class SonnenBatterieCoordinator(DataUpdateCoordinator):
             self.latestData["systemdata"]     = await self.hass.async_add_executor_job(self.sbInst.get_systemdata);
             # report if we suceeded or not, the calling cose can then decide how to progress
             resp =  True 
-        except requests.exceptions.Timeout as e:
-            LOGGER.warn("Timeout getting data "+str(type(e))+", details "+str(e))    
+        except requests.exceptions.Timeout as te:
+            LOGGER.warn("Timeout getting data "+str(type(te))+", details "+str(te))    
+            resp =  False
+        except requests.exceptions.ConnectionError as ce:
+            LOGGER.warn("Connection error getting data "+str(type(ce))+", details "+str(ce))    
             resp =  False
         except:
             e = traceback.format_exc()
