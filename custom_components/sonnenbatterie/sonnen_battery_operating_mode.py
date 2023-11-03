@@ -60,7 +60,7 @@ class SonnenBatteryOperatingMode(CoordinatorEntity, SelectEntity, TextEntity):
             hass.services.async_register(
                 DOMAIN,
                 SERVICE_SET_OPERATING_MODE, 
-                verify_domain_control(hass, DOMAIN)(self.sonnenbatterie_set_operating_mode_by_nickname_async),
+                verify_domain_control(hass, DOMAIN)(self.sonnenbatterie_set_operating_mode_by_nickname_setting_manager),
                 # we try and have voluptuous make the more lower case before checking it's in the list
                 vol.Schema(
                     {
@@ -142,6 +142,7 @@ class SonnenBatteryOperatingMode(CoordinatorEntity, SelectEntity, TextEntity):
         except Exception as e:
             LOGGER.warn("SonnenBatteryOperatingMode Unable to get operating mode, type "+str(type(e))+", details "+str(e))   
 
+    # use this version when you're going to handle any problems youerself
     def set_operating_mode_by_nickname_sync(self, modeNickname):
         mode = self.modeNicknamesToModeName.get(modeNickname)
         self.LOGGER.info("SonnenBatteryOperatingMode setting mode with nickname "+modeNickname+" which has mapped to mode "+mode)
@@ -157,7 +158,8 @@ class SonnenBatteryOperatingMode(CoordinatorEntity, SelectEntity, TextEntity):
         self.update_state()
         #self.schedule_update_ha_state()
 
-    async def sonnenbatterie_set_operating_mode_by_nickname_async(self, call):
+    # use this version when you want to use the setting manager to handle any problems / retries
+    async def sonnenbatterie_set_operating_mode_by_nickname_setting_manager(self, call):
         self.LOGGER.debug("SonnenBatteryOperatingMode sonnenbatterie_set_operating_mode set operating mode starting")
         modeNickname = str(call.data[SERVICE_ATTR_OPERATING_MODE_MODE]).lower()
         self.LOGGER.info("SonnenBatteryOperatingMode sonnenbatterie_set_operating_mode set operating mode setting nickname "+modeNickname)
