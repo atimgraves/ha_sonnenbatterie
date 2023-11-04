@@ -166,9 +166,9 @@ class SonnenBatteryOperatingMode(CoordinatorEntity, SelectEntity, TextEntity):
         mode = self.modeNicknamesToModeName.get(modeNickname)
         self.LOGGER.info("SonnenBatteryOperatingMode setting mode with nickname "+modeNickname+" which has mapped to mode "+mode)
         setLambda = lambda: self.sonnenbatterie.set_operating_mode_by_name(mode)
-        checkLambda = lambda: self.sonnenbatterie.get_operating_mode_name() 
+        retrieveLambda = lambda: self.sonnenbatterie.get_operating_mode_name() 
         postLambda= lambda: self.update_state()
-        await self._settingManager.setDesiredSetting(settingName=SETTING_MANAGER_OPERATING_MODE_NAME, targetValue=mode, settingTargetLambda=setLambda, checkTargetLambda=checkLambda, postSetLambda=postLambda, retryInterval=10, retryCount=5)
+        await self._settingManager.setDesiredSetting(settingName=SETTING_MANAGER_OPERATING_MODE_NAME, targetValue=mode, settingTargetLambda=setLambda, retrieveValueLambda=retrieveLambda, postSetLambda=postLambda, retryInterval=10, retryCount=5)
         self.LOGGER.info("SonnenBatteryOperatingMode scheduled setting to mode "+mode) 
 
     def set_flow_rate(self, flowRate):
