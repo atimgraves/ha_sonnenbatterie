@@ -48,7 +48,7 @@ class SonnenBatteryTOUSchedule(CoordinatorEntity, TextEntity):
             hass.services.async_register(
                 DOMAIN,
                 SERVICE_SET_TOU_SCHEDULE, 
-                verify_domain_control(hass, DOMAIN)(self.sonnenbatterie_set_tou_schedule),
+                verify_domain_control(hass, DOMAIN)(self.sonnenbatterie_set_tou_schedule_setting_manager),
                 # we try and have voluptuous make the more lower case before checking it's in the list
                 vol.Schema(
                     {
@@ -108,16 +108,39 @@ class SonnenBatteryTOUSchedule(CoordinatorEntity, TextEntity):
         self.sonnenbatterie.set_time_of_use_schedule_from_json_objects(touschedule.get_as_tou_schedule())
         self.update_state()
 
-
+    # use this version if you are going to handle any retries yourself
     async def sonnenbatterie_set_tou_schedule(self, call):
         self.LOGGER.debug("SonnenBatteryTOUSchedule sonnenbatterie_set_tou_schedule starting")
         touStartStr = call.data[SERVICE_ATTR_TOU_START]
         touEndStr = call.data[SERVICE_ATTR_TOU_END]
-        touMaxPowerInKw = call.data[SERVICE_ATTR_TOU_MAX_POWER_IN_KW]
+        touMaxPowerInKw = int(call.data[SERVICE_ATTR_TOU_MAX_POWER_IN_KW])
         self.LOGGER.info("SonnenBatteryTOUSchedule sonnenbatterie_set_tou_schedule start time is "+touStartStr+" end time is "+touEndStr+", max powerr in kw is "+str(touMaxPowerInKw))
         touStart = datetime.strptime(touStartStr, TIME_FORMAT).time()
         touEnd = datetime.strptime(touEndStr, TIME_FORMAT).time()
         await self.hass.async_add_executor_job(self.set_tou_schedule, touStart, touEnd, touMaxPowerInKw)
+
+
+    # use this version to get the sertttings manager to handle this async
+    # as the TOU is a complex object you have to be using version 0.2.7 of the sonnen batterie 
+    # module to have the proper equality test 
+    async def sonnenbatterie_set_tou_schedule_setting_manager(self, call):
+        self.LOGGER.debug("SonnenBatteryTOUSchedule sonnenbatterie_set_tou_schedule using setting manager starting")
+        touStartStr = call.data[SERVICE_ATTR_TOU_START]
+        touEndStr = call.data[SERVICE_ATTR_TOU_END]
+        touMaxPowerInKw = int(call.data[SERVICE_ATTR_TOU_MAX_POWER_IN_KW])
+        touMaxPower = touMaxPowerInKw * 1000
+        self.LOGGER.info("SonnenBatteryTOUSchedule sonnenbatterie_set_tou_schedule using setting manager start time is "+touStartStr+" end time is "+touEndStr+", max powerr in kw is "+str(touMaxPowerInKw))
+        touStart = datetime.strptime(touStartStr, TIME_FORMAT).time()
+        touEnd = datetime.strptime(touEndStr, TIME_FORMAT).time()
+        touschedule =  timeofuseschedule()
+        touschedule.add_entry(timeofuse(touStart, touEnd, touMaxPower))
+        touString = touschedule.get_as_string()
+        setLambda = lambda: self.sonnenbatterie.set_time_of_use_schedule_from_json_objects(touschedule.get_as_tou_schedule())
+        retrieveLambda = lambda: self.sonnenbatterie.get_time_of_use_schedule_as_schedule()
+        postLambda= lambda: self.update_state()
+        desc = "setting tou to "+touString
+        await self._settingManager.setDesiredSetting(settingName=SETTING_MANAGER_TIME_OF_USE_NAME, targetValue=touschedule, settingTargetLambda=setLambda, retrieveValueLambda=retrieveLambda, postSetLambda=postLambda, description=desc)
+        self.LOGGER.info("SonnenBatteryTOUSchedule scheduled setting using setting manager to " + touString)
 
     @callback
     async def async_handle_coordinator_update(self) -> None:

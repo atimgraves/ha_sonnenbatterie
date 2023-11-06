@@ -59,7 +59,7 @@ class SonnenBatteryReserve(CoordinatorEntity, NumberEntity):
             hass.services.async_register(
                 DOMAIN,
                 SERVICE_SET_BATTERY_RESERVE_ABSOLUTE, 
-                verify_domain_control(hass, DOMAIN)(self.sonnenbatterie_set_battery_reserve_absolute),
+                verify_domain_control(hass, DOMAIN)(self.sonnenbatterie_set_battery_reserve_absolute_setting_manager),
                 vol.Schema(
                     {
                         vol.Required(SERVICE_ATTR_SET_BATTERY_RESERVE_LEVEL_ABSOLUTE): vol.All(
@@ -74,7 +74,7 @@ class SonnenBatteryReserve(CoordinatorEntity, NumberEntity):
             hass.services.async_register(
                 DOMAIN,
                 SERVICE_SET_BATTERY_RESERVE_RELATIVE, 
-                verify_domain_control(hass, DOMAIN)(self.sonnenbatterie_set_battery_reserve_relative),
+                verify_domain_control(hass, DOMAIN)(self.sonnenbatterie_set_battery_reserve_relative_setting_manager),
             )
         self.LOGGER.info("SonnenBatteryReserve initialised added service "+SERVICE_SET_BATTERY_RESERVE_RELATIVE)
 
@@ -82,7 +82,7 @@ class SonnenBatteryReserve(CoordinatorEntity, NumberEntity):
             hass.services.async_register(
                 DOMAIN,
                 SERVICE_SET_BATTERY_RESERVE_RELATIVE_WITH_OFFSET, 
-                verify_domain_control(hass, DOMAIN)(self.sonnenbatterie_set_battery_reserve_relative_with_offset),
+                verify_domain_control(hass, DOMAIN)(self.sonnenbatterie_set_battery_reserve_relative_with_offset_setting_manager),
                 vol.Schema(
                     {
                         vol.Required(SERVICE_ATTR_SET_BATTERY_RESERVE_LEVEL_RELATIVE_OFFSET): vol.All(
@@ -97,7 +97,7 @@ class SonnenBatteryReserve(CoordinatorEntity, NumberEntity):
             hass.services.async_register(
                 DOMAIN,
                 SERVICE_SET_BATTERY_RESERVE_RELATIVE_WITH_MINIMUM, 
-                verify_domain_control(hass, DOMAIN)(self.sonnenbatterie_set_battery_reserve_relative_with_minimum),
+                verify_domain_control(hass, DOMAIN)(self.sonnenbatterie_set_battery_reserve_relative_with_minimum_setting_manager),
                 vol.Schema(
                     {
                         vol.Required(SERVICE_ATTR_SET_BATTERY_RESERVE_LEVEL_MINIMIM): vol.All(
@@ -112,7 +112,7 @@ class SonnenBatteryReserve(CoordinatorEntity, NumberEntity):
             hass.services.async_register(
                 DOMAIN,
                 SERVICE_SET_BATTERY_RESERVE_RELATIVE_WITH_OFFSET_AND_MINIMUM, 
-                verify_domain_control(hass, DOMAIN)(self.sonnenbatterie_set_battery_reserve_relative_with_offset_and_minimum),
+                verify_domain_control(hass, DOMAIN)(self.sonnenbatterie_set_battery_reserve_relative_with_offset_and_minimum_setting_manager),
                 vol.Schema(
                     {
                         vol.Required(SERVICE_ATTR_SET_BATTERY_RESERVE_LEVEL_RELATIVE_OFFSET): vol.All(
@@ -162,9 +162,7 @@ class SonnenBatteryReserve(CoordinatorEntity, NumberEntity):
         """Return the device info."""
         return self._device_info
     
-    # this is probabaly a horrendous and very non python / HA way to do things, but I had all 
-    # sorts of errors around hass async execution and I just couldn't figure a solution out
-    # other than this that didn't involve setting up a separate thread.
+    # Use this version when calling direct and you are going to handle any retries yourself
     def setter_absolute(self, new_reserve_absolute):
         try:
             self.sonnenbatterie.set_battery_reserve(new_reserve_absolute)
@@ -174,10 +172,25 @@ class SonnenBatteryReserve(CoordinatorEntity, NumberEntity):
         self.update_state()
         #self.schedule_update_ha_state()
 
-    async def sonnenbatterie_set_battery_reserve_absolute(self, call):
-        self.LOGGER.debug("SonnenBatteryReserve set reserve starting")
+    def setter_absolute_async_setting(self, new_reserve_absolute):
+        try:
+            self.sonnenbatterie.set_battery_reserve(new_reserve_absolute)
+        except Exception as e:
+            self.LOGGER.warn("SonnenBatteryReserve Unable to set absolute battery reserve, type "+str(type(e))+", details "+str(e))     
+        # we may have changed it, update the state
+        self.update_state()
+        #self.schedule_update_ha_state()
+
+    async def sonnenbatterie_set_battery_reserve_absolute_setting_manager(self, call):
+        self.LOGGER.debug("SonnenBatteryReserve set reserve using setting manager starting")
         new_reserve_absolute = int(call.data[SERVICE_ATTR_SET_BATTERY_RESERVE_LEVEL_ABSOLUTE])
-        self.LOGGER.info("SonnenBatteryReserve set reserve targeting "+str(new_reserve_absolute))
+        self.LOGGER.info("SonnenBatteryReserve set reserve using setting manager targeting "+str(new_reserve_absolute))
+        setLambda = lambda: self.sonnenbatterie.set_battery_reserve(new_reserve_absolute)
+        checkLambda = lambda: int(self.sonnenbatterie.get_battery_reserve())
+        postLambda = lambda: self.update_state()
+        desc = "absolute mode"
+        await self._settingManager.setDesiredSetting(settingName=SETTING_MANAGER_BATTERY_RESERVE_NAME, targetValue=new_reserve_absolute, settingTargetLambda=setLambda, retrieveValueLambda=checkLambda, postSetLambda=postLambda, description = desc)
+
         # await self.hass.async_add_executor_job(self.setter_absolute, new_reserve_absolute)
 
     def setter_relative(self, reserve_offset):
@@ -189,15 +202,40 @@ class SonnenBatteryReserve(CoordinatorEntity, NumberEntity):
         self.update_state()
         #self.schedule_update_ha_state()
 
+    # this version makes the call directly
     async def sonnenbatterie_set_battery_reserve_relative(self, call):
         self.LOGGER.info("SonnenBatteryReserve set reserve to current level starting")
         await self.hass.async_add_executor_job(self.setter_relative, 0)
 
+    # this used the settings manager to make the call asynchronously
+    # note that in this case there is no knowing the target value in advance (or more precisely in advance ofthe call suceeding, which may be sometime later)
+    # so we just have to get the settings manager to loop until is has a sucessfull set call
+    async def sonnenbatterie_set_battery_reserve_relative_setting_manager(self, call):
+        self.LOGGER.info("SonnenBatteryReserve set reserve to current level using setting manager starting")
+        await self.hass.async_add_executor_job(self.setter_relative, 0)
+        setLambda = lambda: self.sonnenbatterie.set_battery_reserve_relative_to_currentCharge(0)
+        postLambda = lambda: self.update_state()
+        desc = "to current user charge level"
+        await self._settingManager.setDesiredSetting(settingName=SETTING_MANAGER_BATTERY_RESERVE_NAME, settingTargetLambda=setLambda, postSetLambda=postLambda, description=desc)
+
+    # this version makes the call directly
     async def sonnenbatterie_set_battery_reserve_relative_with_offset(self, call):
         self.LOGGER.debug("SonnenBatteryReserve set reserve relative with offset starting")
         reserve_offset = int(call.data[SERVICE_ATTR_SET_BATTERY_RESERVE_LEVEL_RELATIVE_OFFSET])
         self.LOGGER.info("SonnenBatteryReserve set reserve relative targeting offset "+str(reserve_offset))
         await self.hass.async_add_executor_job(self.setter_relative, reserve_offset)
+
+    # this used the settings manager to make the call asynchronously
+    # note that in this case there is no knowing the target value in advance (or more precisely in advance ofthe call suceeding, which may be sometime later)
+    # so we just have to get the settings manager to loop until is has a sucessfull set call
+    async def sonnenbatterie_set_battery_reserve_relative_with_offset_setting_manager(self, call):
+        self.LOGGER.debug("SonnenBatteryReserve set reserve relative using setting manager with offset starting")
+        reserve_offset = int(call.data[SERVICE_ATTR_SET_BATTERY_RESERVE_LEVEL_RELATIVE_OFFSET])
+        self.LOGGER.info("SonnenBatteryReserve set reserve relative using setting manager targeting offset "+str(reserve_offset))
+        setLambda = lambda: self.sonnenbatterie.set_battery_reserve_relative_to_currentCharge(reserve_offset)
+        postLambda = lambda: self.update_state()
+        desc = "to current user charge with offset of "+str(reserve_offset)
+        await self._settingManager.setDesiredSetting(settingName=SETTING_MANAGER_BATTERY_RESERVE_NAME, settingTargetLambda=setLambda, postSetLambda=postLambda, description=desc)
 
 
     def setter_relative_with_minimum(self, offset, minimum_reserve):
@@ -209,18 +247,45 @@ class SonnenBatteryReserve(CoordinatorEntity, NumberEntity):
         self.update_state()
         #self.schedule_update_ha_state()
 
+    # this version makes the call directly
     async def sonnenbatterie_set_battery_reserve_relative_with_minimum(self, call):
         self.LOGGER.debug("SonnenBatteryReserve set reserve relative starting")
         minimum_reserve = int(call.data[SERVICE_ATTR_SET_BATTERY_RESERVE_LEVEL_MINIMIM])
-        self.LOGGER.info("SonnenBatteryReserve set reserve relative targeting with a minimum reserve of "+str(minimum_reserve))
+        self.LOGGER.info("SonnenBatteryReserve set reserve relative using setting manager targeting with a minimum reserve of "+str(minimum_reserve))
         await self.hass.async_add_executor_job(self.setter_relative_with_minimum, 0, minimum_reserve)
 
+    # this used the settings manager to make the call asynchronously
+    # note that in this case there is no knowing the target value in advance (or more precisely in advance ofthe call suceeding, which may be sometime later)
+    # so we just have to get the settings manager to loop until is has a sucessfull set call
+    async def sonnenbatterie_set_battery_reserve_relative_with_minimum_setting_manager(self, call):
+        self.LOGGER.debug("SonnenBatteryReserve set reserve relative using setting manager starting")
+        minimum_reserve = int(call.data[SERVICE_ATTR_SET_BATTERY_RESERVE_LEVEL_MINIMIM])
+        self.LOGGER.info("SonnenBatteryReserve set reserve relative using setting manager targeting with a minimum reserve of "+str(minimum_reserve))
+        setLambda = lambda: self.sonnenbatterie.set_battery_reserve_relative_to_currentCharge(0, minimum_reserve)
+        postLambda = lambda: self.update_state()
+        desc = "to current user charge but with a minimum of "+str(minimum_reserve)
+        await self._settingManager.setDesiredSetting(settingName=SETTING_MANAGER_BATTERY_RESERVE_NAME, settingTargetLambda=setLambda, postSetLambda=postLambda, description=desc)
+
+    # this version makes the call directly
     async def sonnenbatterie_set_battery_reserve_relative_with_offset_and_minimum(self, call):
         self.LOGGER.debug("SonnenBatteryReserve set reserve relative starting")
         offset = int(call.data[SERVICE_ATTR_SET_BATTERY_RESERVE_LEVEL_RELATIVE_OFFSET])
         minimum_reserve = int(call.data[SERVICE_ATTR_SET_BATTERY_RESERVE_LEVEL_MINIMIM])
         self.LOGGER.info("SonnenBatteryReserve set reserve relative targeting offset "+str(offset)+" with a ninimum reserve of "+str(minimum_reserve))
         await self.hass.async_add_executor_job(self.setter_relative_with_minimum, offset, minimum_reserve)
+
+    # this used the settings manager to make the call asynchronously
+    # note that in this case there is no knowing the target value in advance (or more precisely in advance ofthe call suceeding, which may be sometime later)
+    # so we just have to get the settings manager to loop until is has a sucessfull set call
+    async def sonnenbatterie_set_battery_reserve_relative_with_offset_and_minimum_setting_manager(self, call):
+        self.LOGGER.debug("SonnenBatteryReserve set reserve relative using setting manager starting")
+        offset = int(call.data[SERVICE_ATTR_SET_BATTERY_RESERVE_LEVEL_RELATIVE_OFFSET])
+        minimum_reserve = int(call.data[SERVICE_ATTR_SET_BATTERY_RESERVE_LEVEL_MINIMIM])
+        self.LOGGER.info("SonnenBatteryReserve set reserve relative using setting manager targeting offset "+str(offset)+" with a ninimum reserve of "+str(minimum_reserve))
+        setLambda = lambda: self.sonnenbatterie.set_battery_reserve_relative_to_currentCharge(offset, minimum_reserve)
+        postLambda = lambda: self.update_state()
+        desc = "to current user charge but with offset "+str(offset)+" with a ninimum reserve of "+str(minimum_reserve)
+        await self._settingManager.setDesiredSetting(settingName=SETTING_MANAGER_BATTERY_RESERVE_NAME, settingTargetLambda=setLambda, postSetLambda=postLambda, description=desc)
 
     def set_native_value(self, value: float) -> None:
         new_reserve_absolute = int(value)

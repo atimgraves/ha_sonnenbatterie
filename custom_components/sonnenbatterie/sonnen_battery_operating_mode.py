@@ -78,7 +78,7 @@ class SonnenBatteryOperatingMode(CoordinatorEntity, SelectEntity, TextEntity):
             hass.services.async_register(
                 DOMAIN,
                 SERVICE_SET_FLOW_RATE, 
-                verify_domain_control(hass, DOMAIN)(self.sonnenbatterie_set_flow_rate),
+                verify_domain_control(hass, DOMAIN)(self.sonnenbatterie_set_flow_rate_setting_manager),
                 # we try and have voluptuous make the more lower case before checking it's in the list
                 vol.Schema(
                     {
@@ -143,7 +143,7 @@ class SonnenBatteryOperatingMode(CoordinatorEntity, SelectEntity, TextEntity):
             LOGGER.warn("SonnenBatteryOperatingMode Unable to get operating mode, type "+str(type(e))+", details "+str(e))   
 
     # use this version when you're going to handle any problems youerself
-    def set_operating_mode_by_nickname_sync(self, modeNickname):
+    def set_operating_mode_by_nickname(self, modeNickname):
         mode = self.modeNicknamesToModeName.get(modeNickname)
         self.LOGGER.info("SonnenBatteryOperatingMode setting mode with nickname "+modeNickname+" which has mapped to mode "+mode)
         self.set_operating_mode_sync(mode)
@@ -168,7 +168,8 @@ class SonnenBatteryOperatingMode(CoordinatorEntity, SelectEntity, TextEntity):
         setLambda = lambda: self.sonnenbatterie.set_operating_mode_by_name(mode)
         retrieveLambda = lambda: self.sonnenbatterie.get_operating_mode_name() 
         postLambda= lambda: self.update_state()
-        await self._settingManager.setDesiredSetting(settingName=SETTING_MANAGER_OPERATING_MODE_NAME, targetValue=mode, settingTargetLambda=setLambda, retrieveValueLambda=retrieveLambda, postSetLambda=postLambda, retryInterval=10, retryCount=5)
+        desc = "specified mode"
+        await self._settingManager.setDesiredSetting(settingName=SETTING_MANAGER_OPERATING_MODE_NAME, targetValue=mode, settingTargetLambda=setLambda, retrieveValueLambda=retrieveLambda, postSetLambda=postLambda, description=desc)
         self.LOGGER.info("SonnenBatteryOperatingMode scheduled setting to mode "+mode) 
 
     def set_flow_rate(self, flowRate):
@@ -186,12 +187,30 @@ class SonnenBatteryOperatingMode(CoordinatorEntity, SelectEntity, TextEntity):
             self.LOGGER.warn("SonnenBatteryOperatingMode Unable to set flow rate "+str(type(e))+", details "+str(e))     
         # as there is no directly connected entity here no need to update
 
+
     async def sonnenbatterie_set_flow_rate(self, call):
         # the vol stuff shoudl prevent this being out of bounds
         self.LOGGER.debug("SonnenBatteryOperatingMode sonnenbatterie_set_flow_rate set flow rate starting")
         flowRate = int(call.data[SERVICE_ATTR_FLOW_RATE])
         self.LOGGER.debug("SonnenBatteryOperatingMode sonnenbatterie_set_flow_rate set flow rate to "+str(flowRate))
         await self.hass.async_add_executor_job(self.set_flow_rate, flowRate)
+
+    async def sonnenbatterie_set_flow_rate_setting_manager(self, call):
+        # the vol stuff shoudl prevent this being out of bounds
+        self.LOGGER.debug("SonnenBatteryOperatingMode sonnenbatterie_set_flow_rate set flow rate usinfg setting manager starting")
+        flowRate = int(call.data[SERVICE_ATTR_FLOW_RATE])
+        self.LOGGER.debug("SonnenBatteryOperatingMode sonnenbatterie_set_flow_rate set flow rate using setting manager to "+str(flowRate))
+        if flowRate < 0 :
+            self.LOGGER.info("SonnenBatteryOperatingMode sonnenbatterie_set_flow_rate using setting manager set charge rate to "+str(flowRate *-1))
+            setLambda = lambda:  self.sonnenbatterie.set_charge(flowRate * -1)
+        else:
+            self.LOGGER.info("SonnenBatteryOperatingMode sonnenbatterie_set_flow_rate using setting manager set discharge rate to "+str(flowRate))
+            setLambda = lambda:  self.sonnenbatterie.set_discharge(flowRate)
+        desc = "specified flow rate"
+        # we can't test it's been set as there's not way to get the target floiw rate (at least thaat I can see) as it varies second by second
+        # seually there's no mechaism in here to locate the update the 
+        await self._settingManager.setDesiredSetting(settingName=SETTING_MANAGER_FLOW_RATE_NAME, settingTargetLambda=setLambda, description=desc)
+        self.LOGGER.info("SonnenBatteryOperatingMode scheduled setting flow rate to "+str(flowRate)+ " using setting manager") 
 
     @property
     def device_info(self):
