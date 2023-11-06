@@ -1,6 +1,7 @@
 import requests
+import threading
 import traceback
-from datetime import datetime
+
 import sys
 # pylint: disable=unused-wildcard-import
 from .const import *
@@ -64,7 +65,30 @@ async def async_setup_entry(hass, config_entry,async_add_entities):
     def _internal_setup(_username, _password, _ipaddress):
         return sonnenbatterie(_username, _password, _ipaddress)
 
-    sonnenInst = await hass.async_add_executor_job(_internal_setup, username, password, ipaddress)
+    # in some situations there may be a problem toing the setup (login) for example if the batterie IP has changed or it doesn't response
+    # in that case try again
+    loginFailCount = 0
+    # time.sleep generates warnings and blocks everything, so we use an event that allows other things to run (not sure
+    # if HA has a better mechanism for handling delays))
+    sleeper = threading.Event()
+    while True:
+        if (loginFailCount > 10):
+            raise Exception("sonnenbatterie _internal_setup failed to login after 10 attempts, cannot continue")
+        try :
+            sonnenInst = await hass.async_add_executor_job(_internal_setup, username, password, ipaddress)
+            sleeper.set()
+            break 
+        except requests.exceptions.Timeout as te:
+            LOGGER.warn("Timeout in sonnenbatterie _internal_setup  "+str(type(te))+", details "+str(te))  
+        except requests.exceptions.ConnectionError as ce:
+            LOGGER.error("Connection error in sonnenbatterie _internal_setup "+str(type(ce))+", details "+str(ce)) 
+        except:
+            LOGGER.error("General error in sonnenbatterie _internal_setup "+traceback.format_exc())
+        #increment the error counter
+        loginFailCount = loginFailCount + 1
+        # for now hard code this, it should probabaly be configurable
+        sleeper.wait(15)
+
     updateIntervalSeconds = updateIntervalSeconds or 1
     LOGGER.info("{0} - UPDATEINTERVAL: {1}".format(DOMAIN, updateIntervalSeconds))
 
@@ -132,7 +156,7 @@ class SonnenBatterieCoordinator(DataUpdateCoordinator):
         self.hass = hass
         self.latestData = {}
         self.disabledSensors = []
-        self.device_id=device_id;
+        self.device_id=device_id
 
         self.stopped = False
         
@@ -162,8 +186,10 @@ class SonnenBatterieCoordinator(DataUpdateCoordinator):
             self.latestData["inverter"]       = await self.hass.async_add_executor_job(self.sbInst.get_inverter);
             self.latestData["powermeter"]     = await self.hass.async_add_executor_job(self.sbInst.get_powermeter);
             self.latestData["status"]         = await self.hass.async_add_executor_job(self.sbInst.get_status);
+            # get the system data last as that's what's needed to set everything else up
+            # thus we ensure it's been retrieved. It's vital this is done last so we can use this as the first data flag
             self.latestData["systemdata"]     = await self.hass.async_add_executor_job(self.sbInst.get_systemdata);
-            # report if we suceeded or not, the calling cose can then decide how to progress
+            # report if we suceeded or not, the calling code can then decide how to progress
             resp =  True 
         except requests.exceptions.Timeout as te:
             LOGGER.warn("Timeout getting data "+str(type(te))+", details "+str(te))    
@@ -176,7 +202,7 @@ class SonnenBatterieCoordinator(DataUpdateCoordinator):
             LOGGER.error(e)
             resp =  False
         if self.debug:
-            self.SendAllDataToLog();
+            self.SendAllDataToLog()
         return resp
 
        
@@ -187,7 +213,19 @@ class SonnenBatterieCoordinator(DataUpdateCoordinator):
         This is the place to pre-process the data to lookup tables
         so entities can quickly look up their data.
         """
-        await self.updateData()
+        # handle any initial fist pass data retrieval.
+        # we must have the system data to proceed, the first time it may not have been set if there was an error before
+        # so just keep trying until we get it (we know that the battery must be contactable as we wouldn't have ben able 
+        # to log in otherwise) this ensures that in  the steps to follow that we can get the serial number and so on to setup the device
+        # this relies on the system data being the last item retrieved int he udate data loop
+        if (self.latestData.get("systemdata") == None):
+            while self.latestData.get("systemdata") == None :
+                await self.updateData()  
+        else :
+            # If it's already been retrieved at least once then we can just continue and if there is a connection error continue using
+            # cached data
+            await self.updateData()
+
         self.parse()
         
         #Create/Update the Main Sensor, named after the battery serial
