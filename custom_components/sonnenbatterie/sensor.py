@@ -82,8 +82,10 @@ async def async_setup_entry(hass, config_entry,async_add_entities):
             LOGGER.warn("Timeout in sonnenbatterie _internal_setup  "+str(type(te))+", details "+str(te))  
         except requests.exceptions.ConnectionError as ce:
             LOGGER.error("Connection error in sonnenbatterie _internal_setup "+str(type(ce))+", details "+str(ce)) 
-        except:
-            LOGGER.error("General error in sonnenbatterie _internal_setup "+traceback.format_exc())
+        except requests.exceptions.HTTPError as he:
+            LOGGER.error("Http error in sonnenbatterie _internal_setup "+str(type(he))+", details "+str(he))  
+        except Exception as e:
+            LOGGER.error("General error in sonnenbatterie _internal_setup "+str(type(e))+", details "+str(e)+" stack"+traceback.format_exc())
         #increment the error counter
         loginFailCount = loginFailCount + 1
         # for now hard code this, it should probabaly be configurable
@@ -197,6 +199,9 @@ class SonnenBatterieCoordinator(DataUpdateCoordinator):
         except requests.exceptions.ConnectionError as ce:
             LOGGER.warn("Connection error getting data "+str(type(ce))+", details "+str(ce))    
             resp =  False
+        except requests.exceptions.HTTPError as he:
+            LOGGER.warn("Http error getting data "+str(type(he))+", details "+str(he))    
+            resp =  False
         except:
             e = traceback.format_exc()
             LOGGER.error(e)
@@ -260,6 +265,11 @@ class SonnenBatterieCoordinator(DataUpdateCoordinator):
                 self.serial = "UNKNOWN"
             self.allSensorsPrefix = "sensor.{}_{}_".format(DOMAIN, self.serial)
             self.deviceName = "{}_{}".format(DOMAIN, self.serial)
+
+        
+
+        # save it away for later use by spoecial entities
+        self.initialDeviceInfo = deviceinfo
 
         self.sensor.set_state(statedisplay)
         self.sensor.set_attributes(self.latestData["systemdata"])
