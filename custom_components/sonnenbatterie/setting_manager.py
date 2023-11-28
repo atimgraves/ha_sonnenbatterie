@@ -38,11 +38,11 @@ class _SonnenSettingCommand():
             if (self._postSetLambda != None):
                 self._postSetLambdaStr = "Provided"
             if (retryInterval < 0) :
-                LOGGER.info("SonnenSettingCommand for "+self._settingName+"  "+self._description+"  negative retry interval of "+str(retryInterval)+" was supplied. This is not allowed and will default to 60")
+                LOGGER.warn("SonnenSettingCommand for "+self._settingName+"  "+self._description+"  negative retry interval of "+str(retryInterval)+" was supplied. This is not allowed and will default to 60")
                 retryInterval = 60
             self._retryInterval = retryInterval
             if (retryCount < 0) :
-                LOGGER.info("SonnenSettingCommand for "+self._settingName+" "+self._description+" negative retry cound of "+str(retryCount)+" was supplied. This is not allowed and will default to 10")
+                LOGGER.warn("SonnenSettingCommand for "+self._settingName+" "+self._description+" negative retry cound of "+str(retryCount)+" was supplied. This is not allowed and will default to 10")
                 retryCount = 10
             self._retryCount = retryCount
             self._origRetryCount = retryCount
@@ -57,111 +57,148 @@ class _SonnenSettingCommand():
     async def start(self):
         with self._settingLock:
             if not self._running:
-                LOGGER.info("Starting SonnenSettingCommand waiting to initialise thread for "+self._settingName+"  "+self._description)
+                LOGGER.debug("Starting SonnenSettingCommand thread for "+self._settingName+"  "+self._description)
                 threading.Thread(target=self.watcher).start()
                 self._running = True
-                LOGGER.info("Started SonnenSettingCommand thread for "+self._settingName+"  "+self._description)
+                LOGGER.debug("Started SonnenSettingCommand thread for "+self._settingName+"  "+self._description)
             else:
-                LOGGER.info("SonnenSettingCommand thread already running for "+self._settingName+"  "+self._description)
+                LOGGER.debug("SonnenSettingCommand thread already running for "+self._settingName+"  "+self._description)
 
 
     def stop(self):
         with self._settingLock:
-            LOGGER.info("Stopping SonnenSettingCommand waiting to initialise thread for "+self._settingName+"  "+self._description)
+            LOGGER.debug("Stopping SonnenSettingCommand waiting to initialise thread for "+self._settingName+"  "+self._description)
             self._stopped.set()
             self._running = False
     
     def watcher(self) -> None:
         LOGGER.info("SonnenSettingCommand starting setting "+self._settingName+"  "+self._description)
+        # this is used to let us sleep outside the lock if there was a problem
+        sleepOutsideLock = False
         while not self._stopped.isSet() and (self._retryCount != 0):
+            # if there was a prvious problem then the loop will have continued and got to here
+            # sleepOutsideLock will have been set so do the sleep
+            # doing it this way allows for a change to be made while sleeping here and thus let this handle a changed value
+            # this is needed to allow an incomming change to happen while we are blocked on a set or retrieve operation and the loop will then update
+            if (sleepOutsideLock) :
+                LOGGER.debug("SonnenSettingCommand doing sleep outside lock for problem")
+                # must disable this incase we have a success later on
+                sleepOutsideLock = False
+                self._stopped.wait(self._retryInterval)
+
             with self._settingLock:
-                LOGGER.warn("SonnenSettingCommand trying setting" +self._settingName+"  "+self._description+" attempts remaining"+str(self._retryCount))
+                LOGGER.debug("SonnenSettingCommand trying setting " +self._settingName+"  "+self._description+" attempts remaining"+str(self._retryCount))
                 # decrement the retry if needed
                 if (self._retryCount > 0) :
-                    LOGGER.warn("The SonnenSettingCommand loop starting iteration "+str(self._retryCount)+" out of the origional "+str(self._origRetryCount))
+                    LOGGER.debug("The SonnenSettingCommand loop " +self._settingName+" starting iteration "+str(self._retryCount)+" out of the origional "+str(self._origRetryCount))
                     self._retryCount = self._retryCount -1 
-                # try to set the value
+                # try to set the value, if there is a ptroblem then setErrorMsg will be set for error handling
+                setMsg = None
+                setMsgError = False
                 try:
                     self._settingTargetLambda()
-                    LOGGER.warn("SonnenSettingCommand completed setting"+self._settingName+"  "+self._description)
-                except requests.exceptions.Timeout as e:
-                    LOGGER.error("SonnenSettingCommand Timeout getting data iteration "+str(self._retryCount)+" out of the origional "+str(self._origRetryCount)+" "+str(type(e))+", details "+str(e)+" waiting to retry")
-                    self._stopped.wait(self._retryInterval)  
-                    continue  
+                    LOGGER.debug("SonnenSettingCommand completed setting"+self._settingName+"  "+self._description)
+                except requests.exceptions.Timeout as te:
+                    setMsg = "SonnenSettingCommand Timeout getting data, iteration "+str(self._retryCount)+" out of the origional "+str(self._origRetryCount)+" "+str(type(te))+", details "+str(te)+" waiting to retry"
+                except requests.exceptions.ConnectionError as ce:
+                    setMsg = "SonnenSettingCommand ConnectionError getting data, iteration "+str(self._retryCount)+" out of the origional "+str(self._origRetryCount)+" "+str(type(ce))+", details "+str(ce)+" waiting to retry"
+                except requests.exceptions.HTTPError as he:
+                    setMsg="SonnenSettingCommand HTTPError getting data, iteration "+str(self._retryCount)+" out of the origional "+str(self._origRetryCount)+" "+str(type(e))+", details "+str(he)+" waiting to retry"
                 except Exception as e:
-                    LOGGER.error("SonnenSettingCommand error processing setting "+self._settingName+"  "+self._description+", type "+str(type(e))+", details "+str(e)+" traceback "+traceback.format_exc()+" waiting to retry")
-                    self._stopped.wait(self._retryInterval)
+                    setMsg = "SonnenSettingCommand error processing setting "+self._settingName+"  "+self._description+", type "+str(type(e))+", details "+str(e)+" traceback "+traceback.format_exc()+" waiting to retry"
+                    setMsgError = True
+                if setMsg != None:
+                    if setMsgError:
+                        LOGGER.error(setMsg)
+                    else:
+                        LOGGER.warn(setMsg)
+                    # set the flag to do the sleep before re-entering the lock as we need to let other things have a chance
+                    sleepOutsideLock = True
                     continue
-                
                 # to get here the settings command can't have thrown an error
                 # if there is no target value set then nothing to check to see if it's worked so as there can;t havwe been an exception can exit
                 if (self._targetValue == None):
-                    LOGGER.warn("Completed the SonnenSettingCommand command sucesfully with no target provided for setting "+self._settingName+"  "+self._description)
+                    LOGGER.info("Completed the SonnenSettingCommand command sucesfully with no target provided for setting "+self._settingName+"  "+self._description)
                     break
 
                 if (self._retrieveValueLambda == None):
-                    LOGGER.warn("Completed the SonnenSettingCommand loop for setting "+self._settingName+"  "+self._description+" the check lambda ("+self._retrieveValueLambdaStr+") was not provided")            
+                    LOGGER.info("Completed the SonnenSettingCommand loop for setting "+self._settingName+"  "+self._description+" the check lambda ("+self._retrieveValueLambdaStr+") was not provided")            
                     break
                 
                 # check if the set gave us the right value
-                updatedValue = None
+                retrievedValue = None
+                retrieveMsg = None
+                retrieveMsgError = False
                 try:
-                    LOGGER.warn("SonnenSettingCommand trying to retrieve data for testing"+self._settingName+"  "+self._description)     
-                    updatedValue = self._retrieveValueLambda ()  
-                    LOGGER.warn("SonnenSettingCommand completed get retrieve data for testing"+self._settingName+"  "+self._description)          
-                except requests.exceptions.Timeout as e:
-                    LOGGER.error("SonnenSettingCommand Timeout getting retrieve data iteration "+str(self._retryCount)+" out of the origional "+str(self._origRetryCount)+" "+str(type(e))+", details "+str(e)+" waiting to retry")
-                    self._stopped.wait(self._retryInterval)  
-                    continue  
+                    LOGGER.debug("SonnenSettingCommand trying to retrieve data for testing "+self._settingName+"  "+self._description)     
+                    retrievedValue = self._retrieveValueLambda ()  
+                    LOGGER.debug("SonnenSettingCommand completed get retrieve data for testing "+self._settingName+"  "+self._description)   
+                except requests.exceptions.Timeout as te:
+                    retrieveMsg = "SonnenSettingCommand error getting retrieve data "+self._settingName+"  "+self._description+", type "+str(type(te))+", details "+str(te)+" waiting to retry"
+                except requests.exceptions.ConnectionError as ce:
+                    retrieveMsg = "SonnenSettingCommand error getting retrieve data "+self._settingName+"  "+self._description+", type "+str(type(ce))+", details "+str(ce)+" waiting to retry"
+                except requests.exceptions.HTTPError as he:
+                    retrieveMsg = "SonnenSettingCommand error getting retrieve data "+self._settingName+"  "+self._description+", type "+str(type(he))+", details "+str(he)+" waiting to retry"
                 except Exception as e:
-                    LOGGER.error("SonnenSettingCommand error getting retrieve data "+self._settingName+"  "+self._description+", type "+str(type(e))+", details "+str(e)+" traceback "+traceback.format_exc()+" waiting to retry")
-                    self._stopped.wait(self._retryInterval)
+                    retrieveMsg = "SonnenSettingCommand error processing setting "+self._settingName+"  "+self._description+", type "+str(type(e))+", details "+str(e)+" traceback "+traceback.format_exc()+" waiting to retry"
+                    retrieveMsgError = True
+
+                if retrieveMsg != None:
+                    if retrieveMsgError:
+                        LOGGER.error(retrieveMsg)
+                    else:
+                        LOGGER.warn(retrieveMsg)
+                    
+                    # set the flag to do the sleep before re-entering the lock as we need to let other things have a chance
+                    sleepOutsideLock = True
                     continue
             
                 # to get here the set must have worked and the target value and retrieve lembds must not be None and must have worked
                 # is a test lambda is not supploed then use the pythion equality check,
                 # is the test lambda is supplied then 
                 if (self._testTargetAchievedLambda == None):
-                    LOGGER.warn("SonnenSettingCommand  setting"+self._settingName+"  "+self._description+" testing using the default equality test")
-                    if (self._targetValue == updatedValue) :
-                        LOGGER.warn("SonnenSettingCommand setting"+self._settingName+"  "+self._description+" target value of "+str(self._targetValue)+" has been achieved (default equality test)")
+                    LOGGER.debug("SonnenSettingCommand  setting"+self._settingName+"  "+self._description+" testing using the default equality test")
+                    if (self._targetValue == retrievedValue) :
+                        LOGGER.debug("SonnenSettingCommand setting"+self._settingName+"  "+self._description+" target value of "+str(self._targetValue)+" has been achieved (default equality test)")
                         break
                     else:
-                        LOGGER.warn("SonnenSettingCommand problem processing setting"+self._settingName+"  "+self._description+" set failed, got :"+str(updatedValue)+": which is type "+str(type(updatedValue))+" back when expected :"+self._targetValueStr+": which is of type "+str(type(self._targetValueStr))+" (default equality test)")
+                        LOGGER.debug("SonnenSettingCommand problem processing setting"+self._settingName+"  "+self._description+" set failed, got :"+str(retrievedValue)+": which is type "+str(type(retrievedValue))+" back when expected :"+self._targetValueStr+": which is of type "+str(type(self._targetValueStr))+" (default equality test)")
                 else :
-                    LOGGER.warn("SonnenSettingCommand  setting"+self._settingName+"  "+self._description+" testing using supplied equality test")
+                    LOGGER.debug("SonnenSettingCommand  setting"+self._settingName+"  "+self._description+" testing using supplied equality test")
                     try:
-                        if (self._testTargetAchievedLambda(self._targetValue, updatedValue)) :
-                            LOGGER.warn("SonnenSettingCommand setting"+self._settingName+"  "+self._description+" target value of "+str(self._targetValueStr)+" has been achieved (supplied equality test)")
+                        if (self._testTargetAchievedLambda(self._targetValue, retrievedValue)) :
+                            LOGGER.debug("SonnenSettingCommand setting"+self._settingName+"  "+self._description+" target value of "+str(self._targetValueStr)+" has been achieved (supplied equality test)")
                             break
                         else:
-                            LOGGER.warn("SonnenSettingCommand problem processing setting"+self._settingName+"  "+self._description+" set failed, got :"+str(updatedValue)+": which is type "+str(type(updatedValue))+" back when expected :"+self._targetValueStr+": which is of type "+str(type(self._targetValueStr))+" (supplied equality test)")
+                            LOGGER.debug("SonnenSettingCommand problem processing setting"+self._settingName+"  "+self._description+" set failed, got :"+str(retrievedValue)+": which is type "+str(type(retrievedValue))+" back when expected :"+self._targetValueStr+": which is of type "+str(type(self._targetValueStr))+" (supplied equality test)")
                     except Exception as et:
-                        # This is likely a programming problem, we don;t carry on because of that but to a diagnostic dump
-                        LOGGER.error("SonnenSettingCommand error doing supplied equality test for "+self._settingName+"  "+self._description+" suoplied value :"+str(updatedValue)+": which is type "+str(type(updatedValue))+" against expected value :"+self._targetValueStr+": which is of type "+str(type(self._targetValueStr))+", exception details are type "+str(type(et))+", details "+str(et)+" traceback "+traceback.format_exc()+" will not retry or do any supplied post set lambda")
+                        # This is likely a programming problem, we don't carry on because of that but do a diagnostic dump
+                        LOGGER.error("SonnenSettingCommand error doing supplied equality test for "+self._settingName+"  "+self._description+" suoplied value :"+str(retrievedValue)+": which is type "+str(type(retrievedValue))+" against expected value :"+self._targetValueStr+": which is of type "+str(type(self._targetValueStr))+", exception details are type "+str(type(et))+", details "+str(et)+" traceback "+traceback.format_exc()+" will not retry or do any supplied post set lambda")
                         self._postSetLambda = None
                         break 
-
-                # hang around a bit, this will be interrupted if the stop is called, then we will fail out in the while loop
-                self._stopped.wait(self._retryInterval)
-            # end of the with lock
+            
+            # end of the with lock, do this sleep outside the lock
+            # ensure that we won;t do a second sleep
+            sleepOutsideLock = False
+            # hang around a bit, this will be interrupted if the stop is called, then we will fail out in the while loop
+            self._stopped.wait(self._retryInterval)
         # end of the while loop
         # if we ran out of retries then can;t do anything except yell for help
         if (self._retryCount == 0) :
-                LOGGER.error("The SonnenSettingCommand loop "+self.describe()+" has failed to complete, the setting has not ben applied")
+                LOGGER.warn("The SonnenSettingCommand loop "+self.describe()+" has failed to complete, the setting has not ben applied")
         else :
             # the loop has terminated becsue we have got to the target, there was no target or check (but we sucesfully did the call) or we ran out of retries
-            LOGGER.info("SonnenSettingCommand loop exited, tidying up")
+            LOGGER.debug("SonnenSettingCommand loop "+self.describe()+" exited, tidying up")
             self.stop()
             if  (self._postSetLambda != None):
                 # run any post set updates
                 try:
                     self._postSetLambda()
-                    LOGGER.info("Completed the SonnenSettingCommand post set command for setting "+self._settingName+"  "+self._description+" to "+self._targetValueStr)
+                    LOGGER.debug("Completed the SonnenSettingCommand post set command for setting "+self._settingName+"  "+self._description+" to "+self._targetValueStr)
                 except Exception as ue:
-                    LOGGER.error("SonnenSettingCommand error procedding updated notification for  "+self._settingName+"  "+self._description+", exception type "+str(type(ue))+", details "+str(ue)+" traceback "+traceback.format_exc())
+                    LOGGER.debug("SonnenSettingCommand error procedding updated notification for  "+self._settingName+"  "+self._description+", exception type "+str(type(ue))+", details "+str(ue)+" traceback "+traceback.format_exc())
             else:
-                LOGGER.info("Completed the SonnenSettingCommand post set command not provided for setting "+self._settingName+"  "+self._description+" to "+self._targetValueStr)
+                LOGGER.debug("Completed the SonnenSettingCommand post set command not provided for setting "+self._settingName+"  "+self._description+" to "+self._targetValueStr)
         # notify the manager that we're done, it will do it's thing to tidy up, this has top be done outside the lock as it re'enteres locked portions of this instance
         self._settingsManager.settingLoopCompleted(self._settingName)  
         return     
@@ -169,7 +206,7 @@ class _SonnenSettingCommand():
 class SonnenSettingsManager():
     def __init__(self, hass):
         self._hass = hass
-        self._settingsMap = {}
+        self._settingsDictionary = {}
         self._managerLock = threading.Lock()
 
     # settingName - used to track what is being set and to change if modified in progress
@@ -184,46 +221,61 @@ class SonnenSettingsManager():
         LOGGER.debug("SonnenSettingsManager setDesiredSettingCore pre lock aquire") 
         with self._managerLock:       
             LOGGER.debug("SonnenSettingsManager setDesiredSettingCore post lock aquire")  
+            LOGGER.debug("SonnenSettingsManager keys before setDesiredSetting are "+str(self._settingsDictionary.keys()))
             # is there an instance running ? If so we update it with the new values
-            setCommandInstance = self._settingsMap.get(settingName) 
+            setCommandInstance = self._settingsDictionary.get(settingName) 
             if setCommandInstance == None:
-                LOGGER.warn("SonnenSettingsManager Creating new set for setting "+settingName) 
+                LOGGER.debug("SonnenSettingsManager Creating new set for setting "+settingName) 
                 #  Create the setting command instance
                 setCommandInstance = _SonnenSettingCommand(self._hass, settingName, settingTargetLambda, retrieveValueLambda, testTargetAchievedLambda, postSetLambda, self , targetValue, retryInterval, retryCount, description)
                 # have to save if BEFORE starting it in case it succedds in the setting before we save it
-                self._settingsMap[settingName] = setCommandInstance 
-                LOGGER.warn("SonnenSettingsManager Created set of "+setCommandInstance.describe())
-                #self._hass.async_create_task(setCommandInstance.start())
-                LOGGER.warn("SonnenSettingsManager Started loop for setting "+settingName) 
+                self._settingsDictionary[settingName] = setCommandInstance 
+                LOGGER.info("SonnenSettingsManager Created set of "+setCommandInstance.describe())
             else:
-                LOGGER.warn("SonnenSettingsManager Updating previous set for "+setCommandInstance.describe())
+                LOGGER.debug("SonnenSettingsManager Updating previous set for "+setCommandInstance.describe())
                 # just update it, no need to 
                 setCommandInstance.updateTarget(settingTargetLambda, retrieveValueLambda, testTargetAchievedLambda, postSetLambda, targetValue, retryInterval, retryCount, description)
-                LOGGER.warn("SonnenSettingsManager Updated version is "+setCommandInstance.describe())
-        #self._managerLock.release
+                LOGGER.info("SonnenSettingsManager Updated version is "+setCommandInstance.describe())
+
+            LOGGER.debug("SonnenSettingsManager keys after setDesiredSetting are "+str(self._settingsDictionary.keys()))
         LOGGER.debug("SonnenSettingsManager setDesiredSettingCore lock released")  
         # start it processing
+        LOGGER.debug("SonnenSettingsManager Starting loop for setting "+settingName) 
         await setCommandInstance.start()
     
     # for MT consistency any calles should make sure they have aquired the _managerLock 
     def _removeSetting(self, settingName)-> None:
-        self._settingsMap.pop(settingName)
+        self._settingsDictionary.pop(settingName)
 
     # should only be called by the setting command to indicate it's finished and is stopping its own thread
     def settingLoopCompleted(self, settingName:str):
         LOGGER.debug("SonnenSettingsManager removing set command for "+settingName)
         with self._managerLock:
-            setCmd = self._settingsMap.get(settingName)
+            LOGGER.debug("SonnenSettingsManager keys before settingLoopCompleted are "+str(self._settingsDictionary.keys()))
+            setCmd = self._settingsDictionary.get(settingName)
             if setCmd  != None:       
                 setCmd.stop()   
                 self._removeSetting(settingName)
                 LOGGER.debug("SonnenSettingsManager removed set command for "+settingName+" from dictionary")
             else :
                 LOGGER.debug("SonnenSettingsManager no set command for "+settingName+" in dictionary")
-        #self._managerLock.release()
+            
+            LOGGER.debug("SonnenSettingsManager keys after settingLoopCompleted are "+str(self._settingsDictionary.keys()))
         LOGGER.debug("SonnenSettingsManager removing set command for "+settingName+" from dictionary lock released")
 
 
     # just a convenience method to help with future changes may do something different later on
     def settingLoopAbandon(self, settingName:str):
         self.settingLoopCompleted(settingName)
+
+    def _dumpSettingsDictKeys(self) -> str:
+        resp = None
+        for key in self._settingsMap.keys():
+            if (resp == None):
+                resp = key
+            else:
+                resp = resp + ", "+key
+        
+        if (resp == None):
+            resp = ""
+        return resp
