@@ -178,7 +178,7 @@ class SonnenBatterieCoordinator(DataUpdateCoordinator):
         self.serial = ""
         self.model_name = ""
         self.allSensorsPrefix = ""
-        self.deviceName="to be set"
+        self.deviceName=""
         self.savedDeviceInfo = None
         
     async def updateData(self) -> bool:
