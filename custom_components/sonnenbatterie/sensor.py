@@ -179,7 +179,7 @@ class SonnenBatterieCoordinator(DataUpdateCoordinator):
         self.model_name = ""
         self.allSensorsPrefix = ""
         self.deviceName="to be set"
-        self.initialDeviceInfo = None
+        self.savedDeviceInfo = None
         
     async def updateData(self) -> bool:
         try:        ##ignore errors here, may be transient
@@ -236,9 +236,8 @@ class SonnenBatterieCoordinator(DataUpdateCoordinator):
         #Create/Update the Main Sensor, named after the battery serial
         systemdata = self.latestData["systemdata"]
         deviceinfo=generateDeviceInfo(self.device_id,systemdata)
-
         # save it away for later use by spoecial entities
-        self.initialDeviceInfo = deviceinfo
+        self.savedDeviceInfo = deviceinfo
             
         serial = systemdata["DE_Ticket_Number"]
         if self.sensor is None:
@@ -266,10 +265,6 @@ class SonnenBatterieCoordinator(DataUpdateCoordinator):
             self.allSensorsPrefix = "sensor.{}_{}_".format(DOMAIN, self.serial)
             self.deviceName = "{}_{}".format(DOMAIN, self.serial)
 
-        
-
-        # save it away for later use by spoecial entities
-        self.initialDeviceInfo = deviceinfo
 
         self.sensor.set_state(statedisplay)
         self.sensor.set_attributes(self.latestData["systemdata"])
