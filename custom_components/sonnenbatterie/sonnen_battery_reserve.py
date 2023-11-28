@@ -22,19 +22,20 @@ from homeassistant.const import PERCENTAGE
 from homeassistant.helpers.service import verify_domain_control
 
 class SonnenBatteryReserve(CoordinatorEntity, NumberEntity):
-    def __init__(self, hass, sonnenbatterie:sonnenbatterie, allSensorsPrefix:str, model_name:str, async_add_entities, mainCoordinator, settingManager:SonnenSettingsManager):     
+    def __init__(self, hass, sonnenbatterie:sonnenbatterie, allSensorsPrefix:str, model_name:str, async_add_entities, mainCoordinator, savedDeviceInfo, deviceName, settingManager:SonnenSettingsManager):     
         self.LOGGER = LOGGER
-        self.LOGGER.info("SonnenBatteryReserve initialising with prefix "+allSensorsPrefix)
-        self._unique_id= "{}{}".format(allSensorsPrefix,"battery_reserve") 
+        self.LOGGER.info("SonnenBatteryReserve initialising with prefix "+allSensorsPrefix+", DOMAIN is "+DOMAIN)
+        self._unique_id= "{}{}".format(allSensorsPrefix,"batteryReserve") 
         self.entity_id= self._unique_id
         self.LOGGER.info("SonnenBatteryReserve id is "+self._unique_id)
         self._attr_has_entity_name = True
         self._name = "Battery Reserve"
+        self.deviceName = deviceName
         self.hass = hass
         self.sonnenbatterie = sonnenbatterie
         self.model_name = model_name
         self.mainCoordinator = mainCoordinator
-        self._device_info = self.mainCoordinator.initialDeviceInfo
+        self._device_info = savedDeviceInfo
         self._attr_entity_config = EntityCategory.CONFIG
         self._attr_native_max_value = 100.0
         self._attr_native_min_value = 0.0
@@ -44,7 +45,7 @@ class SonnenBatteryReserve(CoordinatorEntity, NumberEntity):
         self._enabled_by_default = True
         self._attr_device_class = NumberDeviceClass.BATTERY
         self._device_class = self._attr_device_class
-        self._device_info = mainCoordinator.initialDeviceInfo
+        LOGGER.warn("SonnenBatteryReserve __init__ device_info is "+str(dict(self._device_info)))
         self.state_class = SensorStateClass.MEASUREMENT
         self._attr_icon = "mdi:battery"
         self._coordinator = DataUpdateCoordinator(hass, LOGGER, name="Sonnen battery special sensors battery reserve mode", update_interval=timedelta(seconds=DEFAULT_UPDATE_FREQUENCY_BATTERY_RESERVE), update_method=self.async_handle_coordinator_update)
@@ -160,6 +161,7 @@ class SonnenBatteryReserve(CoordinatorEntity, NumberEntity):
     @property
     def device_info(self) -> DeviceInfo:
         """Return the device info."""
+        LOGGER.warn("SonnenBatteryReserve returning device_info of "+str(dict(self._device_info)))
         return self._device_info
     
     # Use this version when calling direct and you are going to handle any retries yourself

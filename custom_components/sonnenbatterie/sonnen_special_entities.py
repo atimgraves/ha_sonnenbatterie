@@ -36,21 +36,51 @@ class SonnenSpecialEntities():
         self.stopped.set()
     
     def watcher(self) -> None:
+        # there seem to ba a whole bunch of potential race conditopona that may mean we don;t get everythign needed in the main coordinator
+        # so here we do a bunch of sanity checks to make sure it's all OK before carrying on
         LOGGER.info("SonnenSpecialEntities starting watcher loop")
         while not self.stopped.isSet():
             try:
+                # Check that the coordinator has got some of the initial data we need
                 # this will also mean that the model number will have been retrieved as that's done first
                 prefix = self.mainCoordinator.allSensorsPrefix
                 serial = self.mainCoordinator.serial
-                deviceInfo = self.mainCoordinator.initialDeviceInfo
+                savedDeviceInfo = self.mainCoordinator.savedDeviceInfo
+                deviceName = self.mainCoordinator.deviceName
                 LOGGER.warn("SonnenSpecialEntities watcher loop prefix is "+prefix)
-                if (prefix == "") or (serial == "") or (deviceInfo == None):
-                    LOGGER.warn("SonnenSpecialEntities in watcher processing mainCoordinator prefix, serial or deviceInfo is not yet available, waiting")
+                if (prefix == "") or (serial == "") or (deviceName == "") or (savedDeviceInfo == None):
+                    LOGGER.warn("SonnenSpecialEntities in watcher processing mainCoordinator prefix, serial, deviceName or savedDeviceInfo is not yet available, waiting")
                 else:
                     LOGGER.warn("SonnenSpecialEntities in watcher processing, prefix is "+prefix)
-                    self.configure_sensors(prefix)
-                    # finished, lets break out of the loop
-                    break
+                    dictSavedDeviceInfo = dict(savedDeviceInfo)
+                    LOGGER.warn("SonnenSpecialEntities savedDeviceInfo is "+str(dictSavedDeviceInfo))
+                    # examine the retrieved device info to make sure it's complete, if any of the model, name or sw_version are unknown then loop round again
+                    incompleteDeviceInfo = False
+
+                    if (dictSavedDeviceInfo.get("model") == None):
+                        LOGGER.warn("SonnenSpecialEntities savedDeviceInfo model is None ")
+                        incompleteDeviceInfo = True
+                    if (dictSavedDeviceInfo.get("model") == "unknown"):
+                        LOGGER.warn("SonnenSpecialEntities savedDeviceInfo model is unknown ")
+                        incompleteDeviceInfo = True
+                    if (dictSavedDeviceInfo.get("name") == None):
+                        LOGGER.warn("SonnenSpecialEntities savedDeviceInfo name is None ")
+                        incompleteDeviceInfo = True
+                    if (dictSavedDeviceInfo.get("name") == "unknown"):
+                        LOGGER.warn("SonnenSpecialEntities savedDeviceInfo name is unknown ")
+                        incompleteDeviceInfo = True
+                    if (dictSavedDeviceInfo.get("sw_version") == None):
+                        LOGGER.warn("SonnenSpecialEntities sw_version name is None ")
+                        incompleteDeviceInfo = True
+                    if (dictSavedDeviceInfo.get("sw_version") == "unknown"):
+                        LOGGER.warn("SonnenSpecialEntities sw_version name is unknown ")
+                        incompleteDeviceInfo = True
+                    if (incompleteDeviceInfo):
+                        LOGGER.warn("SonnenSpecialEntities savedDeviceInfo missing core data, continuing")
+                    else:
+                        self.configure_sensors(prefix, savedDeviceInfo, deviceName)
+                        # finished, lets break out of the loop
+                        break    
             except Exception as e:
                 LOGGER.error("SonnenSpecialEntities in watcher processing mainCoordinator, type "+str(type(e))+", details "+str(e)+" traceback "+traceback.format_exc())
                 
@@ -60,11 +90,12 @@ class SonnenSpecialEntities():
         LOGGER.debug("Completed the SonnenSpecialEntities startup loop")
         self.stop()
 
-    def configure_sensors(self, prefix):
+    def configure_sensors(self, prefix, savedDeviceInfo, deviceName):
+        # there seems to be some form of race condition
         LOGGER.warn("Configuring SonnenSpecialEntities sensors with prefix "+prefix)
         model_name=self.mainCoordinator.model_name
-        self.sonnenbatteryreserve = SonnenBatteryReserve(self.hass, self.sonnenbatterie, prefix, model_name, self.async_add_entities, self.mainCoordinator, self.settingManager)
-        self.sonnenbatteryoperatingmode = SonnenBatteryOperatingMode(self.hass, self.sonnenbatterie, prefix, model_name, self.async_add_entities, self.mainCoordinator, self.settingManager)
-        self.sonnenbatterytouschedule = SonnenBatteryTOUSchedule(self.hass, self.sonnenbatterie, prefix, model_name, self.async_add_entities, self.mainCoordinator, self.settingManager)
+        self.sonnenbatteryreserve = SonnenBatteryReserve(self.hass, self.sonnenbatterie, prefix, model_name, self.async_add_entities, self.mainCoordinator, savedDeviceInfo, deviceName, self.settingManager)
+        self.sonnenbatteryoperatingmode = SonnenBatteryOperatingMode(self.hass, self.sonnenbatterie, prefix, model_name, self.async_add_entities, self.mainCoordinator, savedDeviceInfo, deviceName, self.settingManager)
+        self.sonnenbatterytouschedule = SonnenBatteryTOUSchedule(self.hass, self.sonnenbatterie, prefix, model_name, self.async_add_entities, self.mainCoordinator,savedDeviceInfo, deviceName, self.settingManager)
 
         

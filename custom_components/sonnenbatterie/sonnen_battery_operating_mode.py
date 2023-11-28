@@ -24,14 +24,15 @@ from homeassistant.helpers.update_coordinator import (
 
 from homeassistant.helpers.service import verify_domain_control
 class SonnenBatteryOperatingMode(CoordinatorEntity, SelectEntity, TextEntity):
-    def __init__(self, hass, sonnenbatterie:sonnenbatterie,  allSensorsPrefix:str, model_name:str,  async_add_entities, mainCoordinator, settingManager:SonnenSettingsManager):
+    def __init__(self, hass, sonnenbatterie:sonnenbatterie,  allSensorsPrefix:str, model_name:str,  async_add_entities, mainCoordinator, savedDeviceInfo, deviceName, settingManager:SonnenSettingsManager):
         self.LOGGER = LOGGER
-        self.LOGGER.info("SonnenBatteryOperatingMode init with prefix "+allSensorsPrefix)
-        self._unique_id= "{}{}".format(allSensorsPrefix,"operating_mode")
+        self.LOGGER.info("SonnenBatteryOperatingMode init with prefix "+allSensorsPrefix+", DOMAIN is "+DOMAIN)
+        self._unique_id= "{}{}".format(allSensorsPrefix,"operatingMode")
         self.entity_id=self._unique_id
         self.LOGGER.warn("SonnenBatteryOperatingMode id is "+self._unique_id+" model_name is "+model_name)
         self._attr_has_entity_name = True
         self._name = "Operating mode"
+        self.deviceName = deviceName
         self._attr_mode = TextMode.TEXT
         self._attr_entity_config = EntityCategory.CONFIG
         self._enabled_by_default = True
@@ -39,7 +40,8 @@ class SonnenBatteryOperatingMode(CoordinatorEntity, SelectEntity, TextEntity):
         self.sonnenbatterie = sonnenbatterie
         self.hass = hass
         self.mainCoordinator = mainCoordinator
-        self._device_info = self.mainCoordinator.initialDeviceInfo
+        self._device_info = savedDeviceInfo
+        LOGGER.warn("SonnenBatteryOperatingMode __init__ device_info is "+str(dict(self._device_info)))
         self.model_name = model_name
         self._options = SONNEN_BATTERY_TO_OPERATING_MODES.get(self.mainCoordinator.model_name, SONNEN_BATTERY_ALL_OPERATING_MODES) 
         self._attr_device_class = SensorDeviceClass.BATTERY
@@ -123,6 +125,7 @@ class SonnenBatteryOperatingMode(CoordinatorEntity, SelectEntity, TextEntity):
     @property
     def device_info(self) -> DeviceInfo:
         """Return the device info."""
+        LOGGER.warn("SonnenBatteryOperatingMode returning device_info of "+str(dict(self._device_info)))
         return self._device_info
     
     @callback

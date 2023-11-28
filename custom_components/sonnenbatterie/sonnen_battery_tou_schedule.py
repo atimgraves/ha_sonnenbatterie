@@ -24,19 +24,21 @@ from sonnenbatterie.timeofuse import timeofuse, timeofuseschedule
 
 TIME_FORMAT="%H:%M:%S"
 class SonnenBatteryTOUSchedule(CoordinatorEntity, TextEntity):
-    def __init__(self, hass, sonnenbatterie:sonnenbatterie, allSensorsPrefix:str, model_name:str, async_add_entities, mainCoordinator, settingManager:SonnenSettingsManager):
+    def __init__(self, hass, sonnenbatterie:sonnenbatterie, allSensorsPrefix:str, model_name:str, async_add_entities, mainCoordinator, savedDeviceInfo, deviceName, settingManager:SonnenSettingsManager):
         self.LOGGER = LOGGER
         self.LOGGER.info("SonnenBatteryTOUSchedule init with prefix "+allSensorsPrefix)
-        self._unique_id= "{}{}".format(allSensorsPrefix,"tou_schedule")
+        self._unique_id= "{}{}".format(allSensorsPrefix,"touSchedule")
         self.entity_id = self._unique_id
         self.LOGGER.info("SonnenBatteryTOUSchedule id is "+self._unique_id)
         self._name = "Time Of Use schedule"
+        self.deviceName = deviceName
         self._attr_mode = TextMode.TEXT
         self._attr_native_value = "Not yet retrieved"
         self.sonnenbatterie = sonnenbatterie
         self.hass = hass
         self.mainCoordinator = mainCoordinator
-        self._device_info = self.mainCoordinator.initialDeviceInfo
+        self._device_info = savedDeviceInfo
+        LOGGER.warn("SonnenBatteryTOUSchedule saved device_info of "+str(dict(self._device_info)))
         self.model_name = model_name
         self._attr_icon = "mdi:clock"
         self._settingManager = settingManager
@@ -96,6 +98,7 @@ class SonnenBatteryTOUSchedule(CoordinatorEntity, TextEntity):
     @property
     def device_info(self) -> DeviceInfo:
         """Return the device info."""
+        LOGGER.warn("SonnenBatteryTOUSchedule returning device_info of "+str(dict(self._device_info)))
         return self._device_info
     
     def set_tou_schedule(self, touStart:time, touEnd:time, touMaxPowerInKw:int):
